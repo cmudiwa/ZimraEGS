@@ -11,7 +11,7 @@ namespace ZimraEGS.Models
         public int DeviceID { get; set; } = 0;
         public string DeviceSerialNumber { get; set; } = string.Empty;
         public FiscalDayStatus FiscalDayStatus { get; set; } = FiscalDayStatus.FiscalDayClosed;
-        
+
         [JsonProperty("FiscalDayOpened")]
         [Newtonsoft.Json.JsonConverter(typeof(LocalDateTimeConverter))]
         public DateTimeOffset FiscalDayOpened { get; set; }

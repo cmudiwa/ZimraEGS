@@ -15,7 +15,7 @@ namespace ZimraEGS.Models
         public string Token { get; private set; } = string.Empty;
 
         public long EGSVersion { get; private set; }
-        
+
         public double InvoiceTotal { get; private set; } = 0;
         public string ApprovalStatus { get; set; } = string.Empty;
         public int InvReceiptGlobalNo { get; private set; } = 0;
@@ -50,7 +50,7 @@ namespace ZimraEGS.Models
 
         public string ReceiptQrCode { get; set; } = string.Empty;
         public string VerificationCode { get; set; } = string.Empty;
-        public long ReceiptID {  get; set; }
+        public long ReceiptID { get; set; }
 
         public string BuyerRegisterName { get; private set; } = string.Empty;
         public string BuyerTradeName { get; private set; } = string.Empty;
@@ -73,13 +73,13 @@ namespace ZimraEGS.Models
         public RelayData() { }
         public RelayData(Dictionary<string, string> formData)
         {
-            Referrer = GetValue(formData, "Referrer");
-            FormKey = GetValue(formData, "Key");
-            Data = GetValue(formData, "Data");
-            Api = GetValue(formData, "Api");
-            Token = GetValue(formData, "Token");
+            Referrer = Utils.GetValue(formData, "Referrer");
+            FormKey = Utils.GetValue(formData, "Key");
+            Data = Utils.GetValue(formData, "Data");
+            Api = Utils.GetValue(formData, "Api");
+            Token = Utils.GetValue(formData, "Token");
 
-            string invoiceView = GetValue(formData, "View");
+            string invoiceView = Utils.GetValue(formData, "View");
             InvoiceTotal = RelayDataHelper.ParseTotalValue(invoiceView);
 
             BusinessDetailJson = RelayDataHelper.GetValueJson(Data, "BusinessDetails");
@@ -189,10 +189,6 @@ namespace ZimraEGS.Models
             }
         }
 
-        private string GetValue(Dictionary<string, string> formData, string key)
-        {
-            return formData.GetValueOrDefault(key) ?? string.Empty;
-        }
         private int GetIntValue(string json, string key, string rootKey = null)
         {
             return (int)RelayDataHelper.GetDecimalCustomField2Value(json, key, rootKey);
@@ -249,7 +245,7 @@ namespace ZimraEGS.Models
         public ApprovedInvoiceViewModel GetApprovedInvoiceViewModel()
         {
             DateTimeOffset fiscalDayEnd = BusinessReference.FiscalDayOpened.AddHours(CertificateInfo.TaxPayerDayMaxHrs);
-            TimeSpan timeDifference = DateTimeOffset.Now - fiscalDayEnd;
+            TimeSpan timeDifference = TimeZoneHelper.GetSouthAfricaTime() - fiscalDayEnd;
             bool TimeForCloseDay = timeDifference.TotalHours < CertificateInfo.TaxpayerDayEndNotificationHrs;
 
             var viewModel = new ApprovedInvoiceViewModel
@@ -259,9 +255,9 @@ namespace ZimraEGS.Models
                 ReceiptVerificationCode = VerificationCode,
                 ReceiptQrCode = ReceiptQrCode,
                 Api = Api,
-                Token= Token,
-                BusinessDetailJson= BusinessDetailJson,
-                FiscalDayStatus= DeviceStatus.FiscalDayStatus,
+                Token = Token,
+                BusinessDetailJson = BusinessDetailJson,
+                FiscalDayStatus = DeviceStatus.FiscalDayStatus,
                 TimeForCloseDay = TimeForCloseDay
             };
 
@@ -342,7 +338,7 @@ namespace ZimraEGS.Models
             viewModel.InvoiceReferenceJson = JsonConvert.SerializeObject(ReceiptReference);
 
             DateTimeOffset fiscalDayEnd = BusinessReference.FiscalDayOpened.AddHours(CertificateInfo.TaxPayerDayMaxHrs);
-            TimeSpan timeDifference = DateTimeOffset.Now - fiscalDayEnd;
+            TimeSpan timeDifference = TimeZoneHelper.GetSouthAfricaTime() - fiscalDayEnd;
             viewModel.TimeForCloseDay = timeDifference.TotalHours < CertificateInfo.TaxpayerDayEndNotificationHrs;
 
             viewModel.ReceiptErrors = ReceiptValidator.ValidateReceipt(Receipt, CertificateInfo.ApplicableTaxes);

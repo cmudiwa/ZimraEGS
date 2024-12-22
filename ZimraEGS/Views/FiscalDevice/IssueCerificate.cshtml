@@ -1,9 +1,10 @@
 ﻿@using Newtonsoft.Json
+@using ZimraEGS.Helpers
 @model CertInfoViewModel
 
 @{
     ViewData["Title"] = "Zimra Integration Setup";
-    TimeSpan dateDifference = (Model.CertificateInfo.CertificateValidTill - DateTimeOffset.Now);
+    TimeSpan dateDifference = (Model.CertificateInfo.CertificateValidTill - TimeZoneHelper.GetSouthAfricaTime());
     double dateDiff = dateDifference.TotalDays;
 }
 
@@ -126,8 +127,8 @@
                     // Disable the button after successful operation
                     if (response.IssueCertificateResponse && response.IssueCertificateResponse.success) { // Adjust "success" to the actual success flag from your API response
                         console.log('Issue Certificate completed successfully!');
-                        $btn.prop('disabled', true); // Disable the button
-                        $btn.text('Issue Certificate'); // Optionally update the button text
+                        $btn.prop('disabled', true); 
+                        $btn.text('Issue Certificate'); 
                     }
 
                 } catch (error) {

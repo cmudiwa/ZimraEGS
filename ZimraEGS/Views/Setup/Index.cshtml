@@ -366,15 +366,14 @@
                         return;
                     }
 
-                    const response = await fetch('GetCfData'); // Fetch JSON data
+                    const response = await fetch('GetCfData');
                     if (!response.ok) {
                         throw new Error('Failed to fetch JSON data from the server.');
                     }
 
-                    const jsonData = await response.json(); // Parse JSON response
+                    const jsonData = await response.json(); 
                     let successCount = 0, failureCount = 0;
 
-                    // Iterasi melalui semua key dan item dalam JSON
                     for (const [key, items] of Object.entries(jsonData)) {
                         for (const item of items) {
                             const fullApiUrl = `${apiEndpoint}/${key}/key/${encodeURIComponent(item.Key)}`;
@@ -420,7 +419,7 @@
 
                 var VerifyTaxPayerDto = {
                     IntegrationType: $('#CertificateInfo_IntegrationType').val(),
-                    DeviceID: parseInt($('#CertificateInfo_DeviceID').val(), 10),  // Convert to integer
+                    DeviceID: parseInt($('#CertificateInfo_DeviceID').val(), 10),  
                     DeviceSerialNumber: $('#CertificateInfo_DeviceSerialNumber').val(),
                     ActivationKey: $('#CertificateInfo_ActivationKey').val()
                 };
@@ -437,23 +436,22 @@
                     contentType: 'application/json',
                     data: JSON.stringify(VerifyTaxPayerDto, null, 2), 
                     success: function (response) {
-                        // Check if response is a string and parse it
                         if (typeof response === 'string') {
                             console.log(response);
                             response = JSON.parse(response);
                         }
-                        // Set the values in the form
+
                         $('#CertificateInfo_TaxPayerName').val(response.taxPayerName);
                         $('#CertificateInfo_TaxPayerTIN').val(response.taxPayerTIN);
                         $('#CertificateInfo_VatNumber').val(response.vatNumber);
                         $('#CertificateInfo_DeviceBranchName').val(response.deviceBranchName);
-                        // Access nested properties
+
                         var deviceBranchAddress = response.deviceBranchAddress;
                         $('#CertificateInfo_Province').val(deviceBranchAddress.province);
                         $('#CertificateInfo_City').val(deviceBranchAddress.city);
                         $('#CertificateInfo_Street').val(deviceBranchAddress.street);
                         $('#CertificateInfo_HouseNo').val(deviceBranchAddress.houseNo);
-                        // Access nested properties
+
                         var deviceBranchContacts = response.deviceBranchContacts;
                         $('#CertificateInfo_Email').val(deviceBranchContacts.email);
                         $('#CertificateInfo_PhoneNo').val(deviceBranchContacts.phoneNo);
@@ -505,7 +503,6 @@
                     contentType: 'application/json',
                     data: JSON.stringify(DeviceRegistrationDto, null, 2),
                     success: function (response) {
-                        // Check if response is a string and parse it
                         if (typeof response === 'string') {
                             response = JSON.parse(response);
                         }
@@ -581,10 +578,9 @@
                         $('#CertificateInfo_TaxPayerDayMaxHrs').val(response.taxPayerDayMaxHrs);
                         $('#CertificateInfo_TaxpayerDayEndNotificationHrs').val(response.taxpayerDayEndNotificationHrs);
 
-                        const certificateValidTill = new Date(response.certificateValidTill); // DateTimeOffset dari server
-                        const formattedDate = certificateValidTill.toLocaleString(); // Mengonversi ke format lokal
+                        const certificateValidTill = new Date(response.certificateValidTill); 
+                        const formattedDate = certificateValidTill.toLocaleString();
 
-                        // Menampilkan di input form
                         $('#CertificateInfo_CertificateValidTill').val(formattedDate);
 
                         $('#CertificateInfo_QrUrl').val(response.qrUrl);

@@ -10,6 +10,14 @@ namespace ZimraEGS.Controllers
 {
     public class RelayController : Controller
     {
+
+        private readonly ILogger<RelayController> _logger;
+
+        public RelayController(ILogger<RelayController> logger)
+        {
+            _logger = logger;
+        }
+
         [HttpPost("relay")]
         public async Task<IActionResult> ProcessFormData([FromForm] Dictionary<string, string> formData)
         {
@@ -31,13 +39,15 @@ namespace ZimraEGS.Controllers
 
                     return RedirectToAction("Register", "Setup");
                 }
-                
+
+                _logger.LogInformation("{0} - {1} - {2}", relayData.Api, HttpContext.Connection.RemoteIpAddress?.ToString() ?? "Unknown",relayData.CertificateInfo.IntegrationType);
+
                 //if (relayData.EGSVersion <= 2410190001)
                 //{
 
                 //    var businessDetails = relayData.BusinessDetailJson;
                 //    businessDetails = RelayDataHelper.ModifyStringCustomFields2(businessDetails, ManagerCustomField.AppVersionGuid, VersionHelper.GetVersion());
-                    
+
                 //    var svm = new SetupViewModel
                 //    {
                 //        Referrer = relayData.Referrer,
@@ -52,7 +62,7 @@ namespace ZimraEGS.Controllers
 
                 if (relayData.BusinessReference.LastApprovalStatus == "REJECTED")
                 {
-                    if(relayData.FormKey != relayData.BusinessReference.ReceiptUUID)
+                    if (relayData.FormKey != relayData.BusinessReference.ReceiptUUID)
                     {
                         ErrorViewModel errorViewModel = new ErrorViewModel
                         {
@@ -83,7 +93,7 @@ namespace ZimraEGS.Controllers
                     if (relayData.DeviceStatus.FiscalDayStatus == FiscalDayStatus.FiscalDayClosed)
                     {
                         // Check Certificate Valid
-                        TimeSpan dateDifference = relayData.CertificateInfo.CertificateValidTill - DateTimeOffset.Now;
+                        TimeSpan dateDifference = relayData.CertificateInfo.CertificateValidTill - TimeZoneHelper.GetSouthAfricaTime();
                         if (dateDifference.TotalDays < 30)
                         {
                             CertInfoViewModel certIfoVew = new CertInfoViewModel
@@ -161,10 +171,11 @@ namespace ZimraEGS.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { Error = $"Internal server error: {ex.Message}" });
+                _logger.LogError(ex, "Kesalahan saat memproses relay data");
+                return StatusCode(500, new { Error = $"ProcessFormData > Internal server error: {ex.Message}" });
             }
         }
-        
+
         public async Task<IActionResult> AjaxSubmitReceipt([FromForm] RelayDataViewModel model)
         {
             try
@@ -216,7 +227,7 @@ namespace ZimraEGS.Controllers
                     var invoiceJson = model.InvoiceJson;
 
                     invoiceJson = RelayDataHelper.ModifyStringCustomFields2(invoiceJson, ManagerCustomField.ApprovalStatusGuid, ApprovalStatus);
-                    
+
                     invoiceJson = RelayDataHelper.UpdateOrCreateField(invoiceJson, model.ReceiptType == ReceiptType.FiscalInvoice ? "IssueDate" : "Date", model.ReceiptDate.ToString("yyyy-MM-dd"));
                     invoiceJson = RelayDataHelper.ModifyStringCustomFields2(invoiceJson, ManagerCustomField.ReceiptDateGuid, model.ReceiptDate.ToString("yyyy-MM-dd HH:mm:ss"));
 

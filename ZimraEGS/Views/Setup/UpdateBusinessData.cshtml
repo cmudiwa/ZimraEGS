@@ -91,7 +91,6 @@
                 }
             }
 
-            // Update BusinessDetails
             const businessDetails = @Html.Raw(Json.Serialize(Model.BusinessDetailsJson));
             const apiUrl = `${apiEndpoint}/business-details-form/38cf4712-6e95-4ce1-b53a-bff03edad273`;
             const secretKey = apiSecret;
@@ -106,7 +105,7 @@
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${secretKey}`
                     },
-                    body: payload // No additional JSON.stringify needed
+                    body: payload 
                 });
 
                 const responseText = await result.text();

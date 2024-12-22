@@ -177,7 +177,7 @@ namespace ZimraEGS.Helpers
                 OrderBy(t => t.FiscalCounterType).
                 ThenBy(c => c.FiscalCounterCurrency).
                 ThenBy(t => t.FiscalCounterTaxID).
-                ThenBy(m => m.FiscalCounterMoneyType)]; 
+                ThenBy(m => m.FiscalCounterMoneyType)];
         }
         public static string ToHashString(this List<FiscalDayCounter> fiscalDayCounters)
         {
@@ -186,20 +186,20 @@ namespace ZimraEGS.Helpers
 
             foreach (var item in fiscalDayCounters)
             {
-                    if (item.FiscalCounterType < FiscalCounterType.BalanceByMoneyType)
-                    {
-                        stringHash += item.FiscalCounterType.ToString();
-                        stringHash += item.FiscalCounterCurrency;
-                        stringHash += item.FiscalCounterTaxPercent == null ? string.Empty : ((double)item.FiscalCounterTaxPercent).ToString("F2");
-                        stringHash += item.FiscalCounterValue * 100;
-                    }
-                    else if (item.FiscalCounterType == FiscalCounterType.BalanceByMoneyType)
-                    {
-                        stringHash += item.FiscalCounterType.ToString();
-                        stringHash += item.FiscalCounterCurrency;
-                        stringHash += item.FiscalCounterMoneyType;
-                        stringHash += item.FiscalCounterValue * 100;
-                    }
+                if (item.FiscalCounterType < FiscalCounterType.BalanceByMoneyType)
+                {
+                    stringHash += item.FiscalCounterType.ToString();
+                    stringHash += item.FiscalCounterCurrency;
+                    stringHash += item.FiscalCounterTaxPercent == null ? string.Empty : ((double)item.FiscalCounterTaxPercent).ToString("F2");
+                    stringHash += item.FiscalCounterValue * 100;
+                }
+                else if (item.FiscalCounterType == FiscalCounterType.BalanceByMoneyType)
+                {
+                    stringHash += item.FiscalCounterType.ToString();
+                    stringHash += item.FiscalCounterCurrency;
+                    stringHash += item.FiscalCounterMoneyType;
+                    stringHash += item.FiscalCounterValue * 100;
+                }
             }
 
             return stringHash.ToUpper();

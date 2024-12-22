@@ -42,7 +42,6 @@ namespace ZimraEGS.ApiClient.Helpers
 
         public static string GetErrorString(string validationErrorCode)
         {
-            // Check if the dictionary contains the key and return the corresponding value, else return a default message.
             if (ErrorString.TryGetValue(validationErrorCode, out string errorMessage))
             {
                 return errorMessage;

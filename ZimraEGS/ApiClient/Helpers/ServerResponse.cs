@@ -16,17 +16,20 @@ namespace ZimraEGS.ApiClient.Helpers
             Endpoint = endpoint;
             StatusCode = statusCode;
             Headers = headers;
-
-            // Ensure ResponseContent is not serialized again if it's already a JSON string
             ResponseContent = responseContent;
         }
 
-        // Deserialize the response content into a specific object using Newtonsoft.Json
         public T GetContentAs<T>()
         {
             try
             {
-                return JsonConvert.DeserializeObject<T>(ResponseContent);
+                var settings = new JsonSerializerSettings
+                {
+                    Converters = new List<JsonConverter> { new LocalDateTimeConverter() },
+                    DateParseHandling = DateParseHandling.None // Ensure no default date parsing conflicts
+                };
+
+                return JsonConvert.DeserializeObject<T>(ResponseContent, settings);
             }
             catch (JsonException ex)
             {
@@ -34,13 +37,11 @@ namespace ZimraEGS.ApiClient.Helpers
             }
         }
 
-        // Get the raw response content as a string
         public string GetContentAsString()
         {
             return ResponseContent;
         }
 
-        // Returns the full response as a JSON string (for logging or debugging)
         public string GetFullResponseAsJson()
         {
             var responseLog = new
@@ -48,7 +49,6 @@ namespace ZimraEGS.ApiClient.Helpers
                 Endpoint,
                 StatusCode = (int)StatusCode,
                 StatusDescription = StatusCode.ToString(),
-                // Deserialize ResponseContent to ensure it's treated as an object
                 ResponseContent = JsonConvert.DeserializeObject(ResponseContent)
             };
 

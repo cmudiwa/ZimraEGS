@@ -5,8 +5,6 @@
 
 @{
     Layout = null;
-    // var apiReference = Newtonsoft.Json.JsonConvert.SerializeObject(TempData["ApiReference"]);
-    // var apiInvoice = Newtonsoft.Json.JsonConvert.SerializeObject(TempData["ApiInvoice"]);
 }
 
 @functions {
@@ -14,13 +12,12 @@
     {
         return status switch
         {
-            ZimraEGS.ApiClient.Enums.FiscalDayStatus.FiscalDayClosed => "--bs-danger", // Red with white text
-            ZimraEGS.ApiClient.Enums.FiscalDayStatus.FiscalDayOpened => "--bs-success", // Green with white text
-            _ => "--bs-warning" // Yellow with dark text
+            ZimraEGS.ApiClient.Enums.FiscalDayStatus.FiscalDayClosed => "--bs-danger",
+            ZimraEGS.ApiClient.Enums.FiscalDayStatus.FiscalDayOpened => "--bs-success",
+            _ => "--bs-warning"
         };
     }
 }
-
 
 <!DOCTYPE html>
 <html lang="en">
@@ -114,22 +111,22 @@
         <div class="container rounded text-center">
            @*  <form> *@
 
-                <div class="container">
-                    <div class="text-center pb-1">
-                        <img src="~/images/logo.png" alt="ZimraEGS" class="img-fluid" style="max-width: 60px;" />
-                        <h3 class="mb-1">Manager Io - Zimra eInvoice Reporting</h3>
-                        <p class="lead" style="color:var(--bs-danger);">"The process cannot be undone, please ensure that the Invoice to be processed is correct and error-free."</p>
-                    </div>
+            <div class="container">
+                <div class="text-center pb-1">
+                    <img src="~/images/logo.png" alt="ZimraEGS" class="img-fluid" style="max-width: 60px;" />
+                    <h3 class="mb-1">Manager Io - Zimra eInvoice Reporting</h3>
+                    <p class="lead" style="color:var(--bs-danger);">"The process cannot be undone, please ensure that the Invoice to be processed is correct and error-free."</p>
                 </div>
+            </div>
 
-                <hr />
+            <hr />
 
-                <!-- Page content-->
+            <!-- Page content-->
 
-                <div class="row">
+            <div class="row">
 
-                    <div class="col-lg-9">
-                        <form id="relayForm" method="POST">
+                <div class="col-lg-9">
+                    <form id="relayForm" method="POST">
                         <div class="card mb-4">
                             <div class="card-header"><h5>Receipt Info</h5></div>
                             <div class="card-body" style="min-height: 605px;">
@@ -362,92 +359,91 @@
                                             </button>
                                         }
 
-                                        <!-- Dynamic Button Here -->
-
                                     </div>
                                 </div>
 
                             </div>
                         </div>
                     </form>
-                    </div>
-                
-                    <div class="col-lg-3">
-                        <!-- Side widget -->
-                        <div class="card mb-4">
-                            <div class="card-header text-center">
-                                <h5>Device Info</h5>
+                </div>
+
+                <div class="col-lg-3">
+                    <!-- Side widget -->
+                    <div class="card mb-4">
+                        <div class="card-header text-center">
+                            <h5>Device Info</h5>
+                        </div>
+                        <div class="card-body" style="min-height: 605px;">
+                            <!-- Device Information -->
+                            <div class="mb-4">
+                                <div class="d-flex justify-content-between">
+                                    <span><strong>Device ID:</strong></span>
+                                    <span>@Model.DeviceID.ToString().PadLeft(10, '0')</span>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <span><strong>Device Serial Number:</strong></span>
+                                    <span>@Model.DeviceSN</span>
+                                </div>
                             </div>
-                            <div class="card-body" style="min-height: 605px;">
-                                <!-- Device Information -->
-                                <div class="mb-4">
-                                    <div class="d-flex justify-content-between">
-                                        <span><strong>Device ID:</strong></span>
-                                        <span>@Model.DeviceID.ToString().PadLeft(10,'0')</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between">
-                                        <span><strong>Device Serial Number:</strong></span>
-                                        <span>@Model.DeviceSN</span>
+                            <hr />
+                            <div class="mb-4">
+                                <div class="d-flex justify-content-center">
+                                    <span><strong>Fiscal Day Status:</strong></span>
+                                </div>
+                                <div class="d-flex justify-content-center">
+                                    <div style="margin-top: 10px; padding: 4px 30px; border-radius: 5px; background-color: var(@GetFiscalDayStatusColor(Model.FiscalDayStatus));">
+                                        @Model.FiscalDayStatus
                                     </div>
                                 </div>
-                                <hr />
-                                <div class="mb-4">
-                                    <div class="d-flex justify-content-center">
-                                        <span><strong>Fiscal Day Status:</strong></span>
-                                    </div>
-                                    <div class="d-flex justify-content-center">
-                                        <div style="margin-top: 10px; padding: 4px 30px; border-radius: 5px; background-color: var(@GetFiscalDayStatusColor(Model.FiscalDayStatus));">
-                                            @Model.FiscalDayStatus
-                                        </div>
-                                    </div>
-                                </div>
-                                <!-- Close Fiscal Day Buttons -->
-                                @if((Model.FiscalDayStatus == ZimraEGS.ApiClient.Enums.FiscalDayStatus.FiscalDayOpened && Model.TimeForCloseDay ) || 
-                                Model.FiscalDayStatus == ZimraEGS.ApiClient.Enums.FiscalDayStatus.FiscalDayCloseFailed){
-                                     <form asp-action="CloseDay" asp-controller="FiscalDevice" method="post"> 
-                                         @Html.HiddenFor(model => model.Api) 
-                                         @Html.HiddenFor(model => model.Token) 
-                                         @Html.HiddenFor(model => model.Referrer) 
-                                         @Html.HiddenFor(model => model.BusinessDetailJson) 
-                                         <button type="submit" class="btn btn-danger btn-sm" style="width: 200px;"> Close FiscalDay </button> 
-                                     </form>
-                                }
+                            </div>
+                            <!-- Close Fiscal Day Buttons -->
+                            @if ((Model.FiscalDayStatus == ZimraEGS.ApiClient.Enums.FiscalDayStatus.FiscalDayOpened && Model.TimeForCloseDay) ||
+                            Model.FiscalDayStatus == ZimraEGS.ApiClient.Enums.FiscalDayStatus.FiscalDayCloseFailed)
+                            {
+                                <form asp-action="CloseDay" asp-controller="FiscalDevice" method="post">
+                                    @Html.HiddenFor(model => model.Api)
+                                    @Html.HiddenFor(model => model.Token)
+                                    @Html.HiddenFor(model => model.Referrer)
+                                    @Html.HiddenFor(model => model.BusinessDetailJson)
+                                    <button type="submit" class="btn btn-danger btn-sm" style="width: 200px;"> Close FiscalDay </button>
+                                </form>
+                            }
 
-                                <hr />
+                            <hr />
 
-                                <!-- QR Code Section -->
-                                <div id="qrCodeImage"
-                                     style="background-color: white; width: 140px; height: 140px; margin: 0 auto; border: 1px solid var(--bs-border-color-translucent); display: flex; align-items: center; justify-content: center;">
-                                    <!-- QR code image will render here -->
-                                </div>
+                            <!-- QR Code Section -->
+                            <div id="qrCodeImage"
+                                 style="background-color: white; width: 140px; height: 140px; margin: 0 auto; border: 1px solid var(--bs-border-color-translucent); display: flex; align-items: center; justify-content: center;">
+                                <!-- QR code image will render here -->
+                            </div>
 
-                                <div class="text-break"
-                                     style="margin-top: 15px; word-wrap: break-word; overflow-wrap: break-word; font-family: monospace; border: 1px solid var(--bs-border-color-translucent); padding: 8px; border-radius: 5px;background-color: var(--bs-card-cap-bg);">
-                                    @if (!string.IsNullOrEmpty(Model.ReceiptQrCode))
-                                    {
-                                        <a href="@Model.ReceiptQrCode" target="_blank" style="color: inherit; text-decoration: none;">
-                                            @Html.Raw(Model.ReceiptQrCode)
-                                        </a>
-                                    }
-                                </div>
-
-                                <!-- Server Signature Section -->
-                                @if (!string.IsNullOrEmpty(Model.ReceiptVerificationCode))
+                            <div class="text-break"
+                                 style="margin-top: 15px; word-wrap: break-word; overflow-wrap: break-word; font-family: monospace; border: 1px solid var(--bs-border-color-translucent); padding: 8px; border-radius: 5px;background-color: var(--bs-card-cap-bg);">
+                                @if (!string.IsNullOrEmpty(Model.ReceiptQrCode))
                                 {
-                                    <div class="text-center mb-3" style="margin-top: 15px;">
-                                        <strong>Server Signature:</strong>
-                                    </div>
-                                    <div class="text-break"
-                                         style="word-wrap: break-word; overflow-wrap: break-word; font-family: monospace; border: 1px solid var(--bs-border-color-translucent); padding: 8px; border-radius: 5px; height: 100px; background-color: var(--bs-card-cap-bg);">
-                                        @Model.ReceiptVerificationCode
-                                    </div>
+                                    <a href="@Model.ReceiptQrCode" target="_blank" style="color: inherit; text-decoration: none;">
+                                        @Html.Raw(Model.ReceiptQrCode)
+                                    </a>
                                 }
-
                             </div>
+
+                            <!-- Server Signature Section -->
+                            @if (!string.IsNullOrEmpty(Model.ReceiptVerificationCode))
+                            {
+                                <div class="text-center mb-3" style="margin-top: 15px;">
+                                    <strong>Server Signature:</strong>
+                                </div>
+                                <div class="text-break"
+                                     style="word-wrap: break-word; overflow-wrap: break-word; font-family: monospace; border: 1px solid var(--bs-border-color-translucent); padding: 8px; border-radius: 5px; height: 100px; background-color: var(--bs-card-cap-bg);">
+                                    @Model.ReceiptVerificationCode
+                                </div>
+                            }
+
                         </div>
                     </div>
                 </div>
-                @* </form> *@
+            </div>
+            @* </form> *@
         </div>
     </main>
 
@@ -478,7 +474,7 @@
                 e.preventDefault();
 
                 var $btn = $(this);
-                showLoading(); // Show loading indicator
+                showLoading();
 
                 var formData = $('form').serialize();
 
@@ -494,7 +490,6 @@
 
                             var message = "";
 
-                            // Process API reference update
                             if (response.ApiReference) {
                                 const apiRef = response.ApiReference;
 
@@ -518,7 +513,6 @@
                                 });
                             }
 
-                            // Process API invoice update
                             if (response.ApiInvoice) {
                                 const apiInvoice = response.ApiInvoice;
 
@@ -542,12 +536,11 @@
                                 });
                             }
 
-                            // Display the response in the textarea
                             var formattedJson = JSON.stringify(response.SubmitReceiptResponse, null, 4);
                             $('#textareaResponse').val(formattedJson);
 
-                            $btn.prop('disabled', true); // Disable the button
-                            $btn.text('Receipt Submitted'); // Change button text
+                            $btn.prop('disabled', true);
+                            $btn.text('Receipt Submitted');
 
                         } catch (err) {
                             console.error('Error processing response:', err);
@@ -558,7 +551,7 @@
                         $('#textareaResponse').val('Error: ' + xhr.responseText);
                     },
                     complete: function () {
-                        hideLoading(); // Hide loading indicator
+                        hideLoading();
                     }
                 });
             });
@@ -573,7 +566,6 @@
                 var referrer = '@Model.Referrer';
                 var businessDetailJson = '@Model.BusinessDetailJson';
 
-                // Create CloseDayViewModel object
                 var closeDayViewModel = {
                     Api: api,
                     Token: token,
@@ -581,23 +573,20 @@
                     BusinessDetailJson: businessDetailJson
                 };
 
-                // Send the data to the CloseDay method in FiscalDevice
                 $.ajax({
                     type: 'POST',
                     url: '@Url.Action("CloseDay", "FiscalDevice")',
                     data: JSON.stringify(closeDayViewModel),
                     contentType: 'application/json; charset=utf-8',
                     success: function (response) {
-                        // Handle success (e.g., redirect to CloseDay.cshtml)
                         window.location.href = response.redirectUrl;
                     },
                     error: function (error) {
-                        // Handle error
                         console.error('Error:', error);
                     }
                 });
             });
-     
+
             function generateQRCode(text) {
                 new QRCode(document.getElementById("qrCodeImage"), {
                     text: text,
@@ -614,6 +603,5 @@
         });
 
     </script>
-
 </body>
 </html>

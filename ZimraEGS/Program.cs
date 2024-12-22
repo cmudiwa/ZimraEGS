@@ -1,8 +1,9 @@
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.AspNetCore.Localization;
-using Newtonsoft.Json;
 using System.Globalization;
 using System.Text.Json.Serialization;
+using ZimraEGS.ApiClient.Helpers;
+using ZimraEGS.Helpers;
 
 namespace ZimraEGS
 {
@@ -13,19 +14,25 @@ namespace ZimraEGS
             Console.OutputEncoding = System.Text.Encoding.UTF8;
 
             var builder = WebApplication.CreateBuilder(args);
-            // Configure JSON options
+
+            string logDirectory = Environment.GetEnvironmentVariable("HOME") != null
+            ? Path.Combine(Environment.GetEnvironmentVariable("HOME"), "LogFiles", "MyApp") // Azure
+            : Path.Combine(AppContext.BaseDirectory, "Logs"); // Local
+
+            if (!Directory.Exists(logDirectory))
+            {
+                Directory.CreateDirectory(logDirectory);
+            }
+
+            // Konfigurasi logging
+            builder.Logging.ClearProviders();
+            builder.Logging.AddConsole();
+            builder.Logging.AddProvider(new FileLoggerProvider(logDirectory, LogLevel.Information));
+
+
             builder.Services.Configure<JsonOptions>(options =>
                 options.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingDefault | JsonIgnoreCondition.WhenWritingNull);
 
-            //builder.Services.AddControllers()
-            //.AddNewtonsoftJson(options =>
-            //{
-            //    options.SerializerSettings.DateParseHandling = DateParseHandling.None; // Prevent automatic date parsing
-            //    options.SerializerSettings.Converters.Add(new ZimraEGS.ApiClient.Helpers.LocalDateTimeConverter()); // Add your custom converter
-            //    options.SerializerSettings.NullValueHandling = NullValueHandling.Ignore; // Optional: ignore null values
-            //});
-
-            // Configure CORS
             builder.Services.AddCors(options =>
             {
                 options.AddPolicy("AllowAllOrigins",
@@ -38,7 +45,6 @@ namespace ZimraEGS
             // Add services to the container.
             builder.Services.AddControllersWithViews();
 
-
             var app = builder.Build();
 
             // Configure the HTTP request pipeline.
@@ -49,8 +55,6 @@ namespace ZimraEGS
                 app.UseHsts();
             }
 
-
-
             app.UseHttpsRedirection();
             app.UseStaticFiles();
 
@@ -58,14 +62,15 @@ namespace ZimraEGS
 
             app.UseCors("AllowAllOrigins");
 
-            // Use request localization
             var defaultCulture = new CultureInfo("en-US");
+
             var localizationOptions = new RequestLocalizationOptions
             {
                 DefaultRequestCulture = new RequestCulture(defaultCulture),
                 SupportedCultures = new List<CultureInfo> { defaultCulture },
                 SupportedUICultures = new List<CultureInfo> { defaultCulture }
             };
+
             app.UseRequestLocalization(localizationOptions);
 
 

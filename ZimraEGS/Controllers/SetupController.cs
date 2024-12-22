@@ -12,13 +12,50 @@ namespace ZimraEGS.Controllers
 {
     public partial class SetupController : Controller
     {
-        private readonly HttpClient _httpClient = new();
 
-        //public IActionResult Index()
-        //{
-        //    var model = new SetupViewModel();
-        //    return View(model);
-        //}
+        private readonly ILogger<SetupController> _logger;
+
+        public SetupController(ILogger<SetupController> logger)
+        {
+            _logger = logger;
+        }
+
+        [HttpPost("Update")]
+        public IActionResult UpdateCustomField([FromForm] Dictionary<string, string> formData)
+        {
+            try
+            {
+                var Referrer = Utils.GetValue(formData, "Referrer");
+                var FormKey = Utils.GetValue(formData, "Key");
+                var Data = Utils.GetValue(formData, "Data");
+                var Api = Utils.GetValue(formData, "Api");
+                var Token = Utils.GetValue(formData, "Token");
+
+                _logger.LogInformation("Setup API Diakses oleh : {0} IP address: {1}", Api, HttpContext.Connection.RemoteIpAddress?.ToString() ?? "Unknown");
+
+                var BusinessDetailJson = RelayDataHelper.GetValueJson(Data, "BusinessDetails");
+
+                if (!string.IsNullOrEmpty(FormKey))
+                {
+                    SetupViewModel setupViewModel = new SetupViewModel
+                    {
+                        Referrer = Referrer,
+                        Api = Api,
+                        Token = Token,
+                        BusinessDetailsJson = BusinessDetailJson
+                    };
+
+                    return View("UpdateBusinessData", setupViewModel);
+                }
+
+                return View("index", "Home");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Kesalahan saat memproses setup api");
+                throw new Exception(ex.Message);
+            }
+        }
 
         [HttpGet("Setup/UpdateBusinessData")]
         public IActionResult UpdateBusinessData()
@@ -26,33 +63,26 @@ namespace ZimraEGS.Controllers
             var svmJson = TempData["SetupViewModel"] as string;
             if (string.IsNullOrEmpty(svmJson))
             {
-                // Handle the case where no TempData is found
-                return Content("No TempData found."); // For debugging purposes
+                return Content("No TempData found.");
             }
 
             var viewModel = JsonConvert.DeserializeObject<SetupViewModel>(svmJson);
-            return View(viewModel); // This will render Views/Setup/UpdateBusinessData.cshtml
+            return View(viewModel);
         }
 
         public IActionResult Register()
         {
             SetupViewModel model = null;
 
-            // Retrieve the model from TempData
             if (TempData["SetupViewModel"] != null)
             {
                 model = JsonConvert.DeserializeObject<SetupViewModel>(TempData["SetupViewModel"].ToString());
             }
 
-            // If the model is null, you might want to handle that case
             if (model == null)
             {
-                // Handle the case where the model is not available
-                // For example, you could redirect to the Index action
                 return RedirectToAction("Index");
             }
-
-            // If you want to return the Index view instead of Register
             return View("Index", model); // This will return the Index view with the model
         }
 
@@ -62,7 +92,6 @@ namespace ZimraEGS.Controllers
         {
             try
             {
-                // Nama file: cfData.json
                 string jsonData = Utils.ReadEmbeddedResource("cfData.json");
                 return Content(jsonData, "application/json");
             }
@@ -165,11 +194,9 @@ namespace ZimraEGS.Controllers
             }
             catch (Exception ex)
             {
-                // Log the exception here if needed
                 return BadRequest(new { Errors = "Error generating CSR: " + ex.Message });
             }
         }
-
 
         [HttpPost("setup/getconfig")]
         public async Task<IActionResult> GetDeviceConfig([FromBody] GetConfigDto getConfigDTO)
@@ -191,7 +218,6 @@ namespace ZimraEGS.Controllers
 
                 PlatformType integrationType = (PlatformType)Enum.Parse(typeof(PlatformType), getConfigDTO.IntegrationType);
 
-                // Create ApiHelper with the Base64 PFX string
                 ApiHelper apiHelper = new ApiHelper(getConfigDTO.Base64Pfx, PlatformType.Simulation);
 
                 ServerResponse serverResponse = await apiHelper.GetConfigAsync(getConfigDTO.DeviceID, getConfigDTO.DeviceModelName, getConfigDTO.DeviceModelVersion);
@@ -223,7 +249,6 @@ namespace ZimraEGS.Controllers
             }
             catch (Exception ex)
             {
-                // Log the exception here if needed
                 return BadRequest(new { Errors = "Error Get Device Configuration: " + ex.Message });
             }
         }
@@ -238,7 +263,6 @@ namespace ZimraEGS.Controllers
 
                 var base64CertificateInfo = ObjectCompressor.SerializeToBase64String(certificateInfo);
 
-                // Update businessDetails
                 var businessDetails = viewModel.BusinessDetails;
                 if (string.IsNullOrEmpty(viewModel.BusinessDetails))
                 {
@@ -291,9 +315,8 @@ namespace ZimraEGS.Controllers
             }
             catch
             {
-
+                throw;
             }
-
             return View("index", viewModel);
         }
     }

@@ -17,7 +17,7 @@ namespace ZimraEGS.Models
         [JsonProperty("ReceiptDate")]
         [Newtonsoft.Json.JsonConverter(typeof(LocalDateTimeConverter))]
         public DateTimeOffset ReceiptDate { get; set; }
-        
+
         public double InvoiceTotal { get; set; } = 0;
         public string BuyerRegisterName { get; set; } = string.Empty;
         public double InvoiceRoundOff { get; set; } = 0;
@@ -71,7 +71,7 @@ namespace ZimraEGS.Models
         public string InvoiceReferenceJson { get; set; }
         public string BusinessReferenceJson { get; set; }
 
-        public string ReceiptErrors { get; set; }= string.Empty;
+        public string ReceiptErrors { get; set; } = string.Empty;
         public bool TimeForCloseDay { get; set; }
         public RelayDataViewModel() { }
 

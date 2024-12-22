@@ -19,39 +19,33 @@ namespace ZimraEGS.Controllers
 
         public IActionResult IssueCerificate()
         {
-            // Retrieve the Base64 string from TempData
             if (TempData["CertInfoViewModel"] != null)
             {
                 string certInfoJson = TempData["CertInfoViewModel"].ToString();
                 CertInfoViewModel model = JsonConvert.DeserializeObject<CertInfoViewModel>(certInfoJson);
                 return View(model);
             }
-            // If TempData is empty, redirect to an error page
             return RedirectToAction("Error", "Home");
         }
 
         public IActionResult OpenDay()
         {
-            // Retrieve the Base64 string from TempData
             if (TempData["OpenDayViewModel"] != null)
             {
                 string openDayViewModel = TempData["OpenDayViewModel"].ToString();
 
-                // Decode the Base64 string to get the serialized object
                 OpenDayViewModel model = JsonConvert.DeserializeObject<OpenDayViewModel>(openDayViewModel);
 
-                // Return the view with the deserialized relayData
                 return View(model);
             }
 
-            // If TempData is empty, redirect to an error page
             return RedirectToAction("Error", "Home");
         }
 
         [HttpPost]
-        public IActionResult CloseDay(CloseDayViewModel model) 
-        { 
-            return View(model); 
+        public IActionResult CloseDay(CloseDayViewModel model)
+        {
+            return View(model);
         }
 
         [HttpPost]
@@ -66,7 +60,7 @@ namespace ZimraEGS.Controllers
                 OpenDayRequest openDayRequest = new OpenDayRequest()
                 {
                     FiscalDayNo = model.LastFiscalDayNo + 1,
-                    FiscalDayOpened = DateTimeOffset.Now
+                    FiscalDayOpened = TimeZoneHelper.GetSouthAfricaTime()
                 };
 
                 ApiHelper apiHelper = new ApiHelper(model.Base64Pfx, model.IntegrationType);
@@ -107,8 +101,8 @@ namespace ZimraEGS.Controllers
                         // Create a new BusinessReference object and modify only the needed properties
                         var businessReference = new BusinessReference
                         {
-                            LastReceiptCounter = 0, // Use the updated value
-                            LastReceiptHash = "",       // Use the updated value
+                            LastReceiptCounter = 0, 
+                            LastReceiptHash = "", 
                             IntegrationType = model.IntegrationType,
                             DeviceID = model.DeviceID,
                             DeviceSerialNumber = model.DeviceSerialNumber,
@@ -225,7 +219,7 @@ namespace ZimraEGS.Controllers
 
                 if (closeDayResponse.StatusCode == System.Net.HttpStatusCode.OK)
                 {
-                    
+
                     Thread.Sleep(10000);
 
                     ServerResponse statusresponse = await apiHelper.SendGetRequestAsync(

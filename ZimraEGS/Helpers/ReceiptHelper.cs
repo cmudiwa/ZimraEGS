@@ -29,12 +29,12 @@ namespace ZimraEGS.Helpers
             {
                 //receipt.ReceiptGlobalNo = relayData.DeviceStatus.LastReceiptGlobalNo + 1;
                 receipt.ReceiptGlobalNo = relayData.BusinessReference.LastReceiptGlobalNo + 1;
-                receipt.ReceiptDate = DateTimeOffset.Now;
+                receipt.ReceiptDate = TimeZoneHelper.GetSouthAfricaTime();
             }
             else
             {
                 receipt.ReceiptGlobalNo = relayData.InvReceiptGlobalNo;
-                receipt.ReceiptDate = relayData.ReceiptDate ?? DateTimeOffset.Now;
+                receipt.ReceiptDate = relayData.ReceiptDate ?? TimeZoneHelper.GetSouthAfricaTime();
             }
 
             int InvNumber = relayData.DeviceStatus.LastFiscalDayNo ?? 1;
@@ -69,8 +69,8 @@ namespace ZimraEGS.Helpers
                     DeviceID = relayData.DeviceIDRef,
                     ReceiptGlobalNo = relayData.ReceiptGlobalNoRef,
                     FiscalDayNo = relayData.FiscalDayNoRef,
-                    ReceiptRefDate = relayData.ReceiptRefDate 
-                    
+                    ReceiptRefDate = relayData.ReceiptRefDate
+
                 };
             }
 
@@ -98,7 +98,10 @@ namespace ZimraEGS.Helpers
 
             //string ReceiptTaxsHash = GetReceiptTaxsHash([.. receipt.ReceiptTaxes], receipt.ReceiptCurrency);
             string ReceiptTaxsHash = GetReceiptTaxsHash([.. listofreceipttax], receipt.ReceiptCurrency);
-
+            
+            Console.WriteLine("Receipt Date: " + receipt.ReceiptDate);
+            Console.WriteLine("Receipt Date Hash: " + receipt.ReceiptDate.ToString("yyyy-MM-ddTHH:mm:ss"));
+            
             string SourcesHash =
                 ((relayData.CertificateInfo.DeviceID.ToString() +
                 receipt.ReceiptType.ToString().ToUpper() +
@@ -318,7 +321,7 @@ namespace ZimraEGS.Helpers
                     {
                         MoneyTypeCode = (MoneyType)t,
                         PaymentAmount = ((relayData.ReceiptType == ReceiptType.CreditNote) ? -1 : 1) * relayData.PaymentAmount1
-                   
+
                     });
                 }
             }

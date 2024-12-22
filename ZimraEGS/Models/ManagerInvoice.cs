@@ -32,7 +32,6 @@
         public string UnitName { get; set; }
         public bool HasDefaultLineDescription { get; set; } = false;
         public string DefaultLineDescription { get; set; }
-
         public CustomFields2 CustomFields2 { get; set; }
     }
 

@@ -75,5 +75,10 @@ namespace ZimraEGS.Helpers
             return sw.ToString();
         }
 
+        public static string GetValue(Dictionary<string, string> formData, string key)
+        {
+            return formData.GetValueOrDefault(key) ?? string.Empty;
+        }
+
     }
 }

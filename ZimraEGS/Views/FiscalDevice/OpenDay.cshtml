@@ -75,10 +75,9 @@
                 e.preventDefault();
                 var $btn = $(this);
 
-                // Show the loading indicator
                 showLoading();
 
-                var formData = $('#openDayForm').serialize(); // Serialize the form data
+                var formData = $('#openDayForm').serialize(); 
 
                 $.ajax({
                     url: '@Url.Action("AjaxOpenDay")',
@@ -93,7 +92,6 @@
 
                             var message = "";
 
-                            // Process API reference update
                             if (response.ApiReference) {
                                 const apiRef = response.ApiReference;
 
@@ -119,12 +117,9 @@
                                 });
                             }
 
-                            // Display response in textarea
                             var formattedJson = JSON.stringify(response, null, 4);
                             $('#textareaResponse').val(formattedJson);
-
-                            // Update button states dynamically
-                            $btn.prop('disabled', true); // Disable the button after click
+                            $btn.prop('disabled', true); 
                             $btn.text('FiscalDay Opened');
 
                         } catch (err) {
@@ -135,7 +130,7 @@
                         $('#textareaResponse').val('Error: ' + xhr.responseText);
                     },
                     complete: function () {
-                        hideLoading(); // Hide the loading indicator
+                        hideLoading(); 
                     }
                 });
             });
