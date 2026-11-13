@@ -304,7 +304,7 @@ public class FiscalFlowTests : IDisposable
         var noHsCode = await RelayAsync(RelayForm(link, Guid.NewGuid().ToString(), [new("Widget", 1, 10m, TaxStandard, 15, Hs: "")]));
         var wrongRate = await RelayAsync(RelayForm(link, Guid.NewGuid().ToString(), [new("Widget", 1, 10m, TaxStandard, 14.5m)]));
 
-        Assert.Contains("Payment information is missing", string.Join(" ", noPayment.result.Problems));
+        Assert.Contains("how this invoice is paid", string.Join(" ", noPayment.result.Problems));
         Assert.Contains("must be equal", string.Join(" ", wrongAmount.result.Problems));
         Assert.Contains("HS Code is missing", string.Join(" ", noHsCode.result.Problems));
         Assert.Contains("14.5%", string.Join(" ", wrongRate.result.Problems));
@@ -313,6 +313,61 @@ public class FiscalFlowTests : IDisposable
         // Nothing was numbered: the first good invoice is still receipt 1.
         var good = await RelayAsync(RelayForm(link, Guid.NewGuid().ToString(), SimpleLines()));
         Assert.Equal(1, good.result.Receipt!.ReceiptCounter);
+    }
+
+    [Fact]
+    public async Task Payment_is_filled_in_from_the_invoice_type_or_the_device_default()
+    {
+        string link = await RegisterDeviceAsync();
+
+        // A payment type without an amount means the whole invoice was paid that way.
+        var typeOnly = await RelayAsync(RelayForm(link, Guid.NewGuid().ToString(), SimpleLines(), paymentType: "1 | Card", paymentAmount: 0m));
+        Assert.True(typeOnly.result.Success, string.Join("; ", typeOnly.result.Problems));
+        var card = Assert.Single(_fdms.AllReceipts[0].ReceiptPayments);
+        Assert.Equal((MoneyType.Card, 115.00m), (card.MoneyTypeCode, card.PaymentAmount));
+
+        // Nothing on the invoice: the default chosen for the device is used.
+        var (_, store, _) = Scope();
+        await store.SetDefaultMoneyTypeAsync((await store.FindByLinkAsync(link))!, (int)MoneyType.BankTransfer);
+
+        var nothing = await RelayAsync(RelayForm(link, Guid.NewGuid().ToString(), SimpleLines(), paymentType: null));
+        Assert.True(nothing.result.Success, string.Join("; ", nothing.result.Problems));
+        var transfer = Assert.Single(_fdms.AllReceipts[1].ReceiptPayments);
+        Assert.Equal((MoneyType.BankTransfer, 115.00m), (transfer.MoneyTypeCode, transfer.PaymentAmount));
+
+        // An explicit payment on the invoice still wins over the default.
+        var explicitCash = await RelayAsync(RelayForm(link, Guid.NewGuid().ToString(), SimpleLines()));
+        Assert.Equal(MoneyType.Cash, _fdms.AllReceipts[2].ReceiptPayments.Single().MoneyTypeCode);
+        Assert.Empty(_fdms.Violations);
+    }
+
+    [Fact]
+    public async Task Setup_creates_tax_codes_from_the_taxes_zimra_configured()
+    {
+        string link = await RegisterDeviceAsync();
+        await RelayAsync(RelayForm(link, Guid.NewGuid().ToString(), SimpleLines()));   // fetches the device configuration
+
+        var (_, store, _) = Scope();
+        var device = (await store.FindByLinkAsync(link))!;
+        var records = ManagerSetupData.Build(device);
+
+        var taxCodes = (JArray)records["tax-code-form"]!;
+        Assert.Equal(["Exempt — 1", "Zero rated 0% — 2", "Standard rated 15% — 3"], taxCodes.Select(t => (string?)t["Name"]));
+        Assert.Equal(15m, (decimal)taxCodes[2]["Rate"]!);
+        Assert.Equal(ManagerSetupData.TaxCodeKey(3), (string?)taxCodes[2]["Key"]);
+
+        // Fields that used to hold device state in Manager are no longer created.
+        var fieldKeys = ((JArray)records["text-custom-field-form"]!).Select(f => (string?)f["Key"]).ToList();
+        Assert.DoesNotContain(ManagerCustomField.BusinessReferenceGuid, fieldKeys);
+        Assert.Contains(ManagerCustomField.CertificateInfoGuid, fieldKeys);
+        Assert.NotNull(records["customer-form"]);
+
+        // A live business gets no sample customers or items.
+        device.Environment = PlatformType.Production;
+        var live = ManagerSetupData.Build(device);
+        Assert.Null(live["customer-form"]);
+        Assert.Null(live["inventory-item-form"]);
+        Assert.NotNull(live["theme-form"]);
     }
 
     [Fact]

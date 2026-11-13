@@ -25,6 +25,7 @@ namespace ZimraEGS.Models
 
         public string FiscalDayStatus { get; set; } = string.Empty;
         public string? LastCloseDayError { get; set; }
+        public int? DefaultMoneyType { get; set; }
 
         /// <summary>Updates the browser still has to store in Manager. Empty for invoices fiscalised before the upgrade.</summary>
         public List<ManagerApiCall> ManagerCalls { get; set; } = [];
@@ -38,12 +39,18 @@ namespace ZimraEGS.Models
         public string Referrer { get; set; } = string.Empty;
         public string Title { get; set; } = string.Empty;
         public List<string> Problems { get; set; } = [];
+
+        /// <summary>Set when the device is known, so its settings can be changed from the page.</summary>
+        public string DeviceLink { get; set; } = string.Empty;
+        public int? DefaultMoneyType { get; set; }
     }
 
     public class DayResultViewModel
     {
         public string Referrer { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
         public bool Success { get; set; }
+        public string? Hint { get; set; }
         public string Message { get; set; } = string.Empty;
         public int FiscalDayNo { get; set; }
     }

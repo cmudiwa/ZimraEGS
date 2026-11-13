@@ -21,7 +21,7 @@ namespace ZimraEGS.Services
 
         private static decimal Round(decimal value, int decimals) => decimal.Round(value, decimals, MidpointRounding.AwayFromZero);
 
-        public static ReceiptDraft Build(RelayData relay, GetConfigResponse? config, bool sellerIsVatRegistered)
+        public static ReceiptDraft Build(RelayData relay, GetConfigResponse? config, bool sellerIsVatRegistered, MoneyType? defaultMoneyType = null)
         {
             var draft = new ReceiptDraft();
             var problems = draft.Problems;
@@ -80,11 +80,15 @@ namespace ZimraEGS.Services
 
             receipt.ReceiptTaxes = BuildTaxes(lines, receipt.ReceiptLinesTaxInclusive);
             receipt.ReceiptTotal = receipt.ReceiptTaxes.Sum(x => x.SalesAmountWithTax);
-            receipt.ReceiptPayments = BuildPayments(relay, problems);
+            int problemsBeforePayments = problems.Count;
+            receipt.ReceiptPayments = BuildPayments(relay, receipt.ReceiptTotal, defaultMoneyType, problems);
 
             if (receipt.ReceiptPayments.Count == 0)
             {
-                problems.Add("Payment information is missing. Fill in Payment Type 1 and Payment Amount 1 on the invoice.");
+                if (problems.Count == problemsBeforePayments)
+                {
+                    problems.Add("ZIMRA needs to know how this invoice is paid. Choose a Payment Type on the invoice, or set a default payment type below so you never have to.");
+                }
             }
             else
             {
@@ -357,9 +361,35 @@ namespace ZimraEGS.Services
                 .ToList();
         }
 
-        private static List<Payment> BuildPayments(RelayData relay, List<string> problems)
+        private static MoneyType? ParseMoneyType(string? type)
+        {
+            // Payment types are dropdown values such as "0 | Cash": the leading digit is the ZIMRA money type.
+            string trimmed = (type ?? string.Empty).Trim();
+            if (trimmed.Length > 0 && int.TryParse(trimmed[..1], out int code) && Enum.IsDefined(typeof(MoneyType), code))
+            {
+                return (MoneyType)code;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Payments of the receipt. Amounts are optional: with no amounts entered the whole total is taken as
+        /// paid by the payment type chosen on the invoice or, failing that, the device's default payment type.
+        /// </summary>
+        private static List<Payment> BuildPayments(RelayData relay, decimal receiptTotal, MoneyType? defaultMoneyType, List<string> problems)
         {
             var payments = new List<Payment>();
+
+            if (relay.PaymentAmount1 <= 0 && relay.PaymentAmount2 <= 0)
+            {
+                MoneyType? type = ParseMoneyType(relay.PaymentType1) ?? ParseMoneyType(relay.PaymentType2) ?? defaultMoneyType;
+                if (type != null)
+                {
+                    payments.Add(new Payment { MoneyTypeCode = type.Value, PaymentAmount = receiptTotal });
+                }
+                return payments;
+            }
+
             decimal sign = relay.ReceiptType == ReceiptType.CreditNote ? -1 : 1;
 
             AddPayment(payments, relay.PaymentType1, relay.PaymentAmount1, sign, "Payment Type 1", problems);
@@ -372,11 +402,9 @@ namespace ZimraEGS.Services
         {
             if (amount <= 0) return;
 
-            // Payment types are dropdown values such as "0 - Cash": the leading digit is the ZIMRA money type.
-            string trimmed = (type ?? string.Empty).Trim();
-            if (trimmed.Length > 0 && int.TryParse(trimmed[..1], out int code) && Enum.IsDefined(typeof(MoneyType), code))
+            if (ParseMoneyType(type) is { } moneyType)
             {
-                payments.Add(new Payment { MoneyTypeCode = (MoneyType)code, PaymentAmount = sign * Round(amount, 2) });
+                payments.Add(new Payment { MoneyTypeCode = moneyType, PaymentAmount = sign * Round(amount, 2) });
             }
             else
             {

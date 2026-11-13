@@ -1,0 +1,25 @@
+@model (string DeviceLink, string Referrer, int? DefaultMoneyType)
+@{
+    var options = new (string value, string text)[]
+    {
+        ("", "Do not assume — ask me on the invoice"), ("0", "Cash"), ("1", "Card"), ("2", "Mobile wallet"),
+        ("4", "Credit (not paid yet)"), ("5", "Bank transfer"), ("6", "Other")
+    };
+    string current = Model.DefaultMoneyType?.ToString() ?? "";
+}
+<form method="post" action="@Url.Action("Settings", "FiscalDevice")" class="row g-2 align-items-end">
+    <input type="hidden" name="deviceLink" value="@Model.DeviceLink" />
+    <input type="hidden" name="referrer" value="@Model.Referrer" />
+    <div class="col-sm-8">
+        <label class="form-label small text-muted mb-1" for="defaultMoneyType">When an invoice does not say how it was paid, report it as</label>
+        <select class="form-select form-select-sm" id="defaultMoneyType" name="defaultMoneyType">
+            @foreach (var option in options)
+            {
+                <option value="@option.value" selected="@(option.value == current)">@option.text</option>
+            }
+        </select>
+    </div>
+    <div class="col-sm-4">
+        <button type="submit" class="btn btn-outline-primary btn-sm w-100">Save default</button>
+    </div>
+</form>

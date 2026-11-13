@@ -1,330 +1,239 @@
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
 using System.Net;
+using ZimraEGS.ApiClient.Enums;
 using ZimraEGS.ApiClient.Helpers;
 using ZimraEGS.ApiClient.Models;
 using ZimraEGS.Data;
-using ZimraEGS.Services;
 using ZimraEGS.Helpers;
 using ZimraEGS.Models;
-
+using ZimraEGS.Services;
 
 namespace ZimraEGS.Controllers
 {
-    public partial class SetupController : Controller
+    public class SetupController : Controller
     {
-
         private readonly ILogger<SetupController> _logger;
         private readonly DeviceStore _store;
         private readonly FiscalDbContext _db;
-        private readonly FiscalService _fiscal;
         private readonly IFdmsClientFactory _clientFactory;
 
-        public SetupController(ILogger<SetupController> logger, DeviceStore store, FiscalDbContext db, FiscalService fiscal, IFdmsClientFactory clientFactory)
+        public SetupController(ILogger<SetupController> logger, DeviceStore store, FiscalDbContext db, IFdmsClientFactory clientFactory)
         {
             _logger = logger;
             _store = store;
             _db = db;
-            _fiscal = fiscal;
             _clientFactory = clientFactory;
         }
 
-        [HttpPost("Update")]
-        public IActionResult UpdateCustomField([FromForm] Dictionary<string, string> formData)
+        public class DeviceSetupRequest
         {
-            try
-            {
-                var Referrer = Utils.GetValue(formData, "Referrer");
-                var FormKey = Utils.GetValue(formData, "Key");
-                var Data = Utils.GetValue(formData, "Data");
-                var Api = Utils.GetValue(formData, "Api");
-                var Token = Utils.GetValue(formData, "Token");
-
-                _logger.LogInformation("Setup API Diakses oleh : {0} IP address: {1}", Api, HttpContext.Connection.RemoteIpAddress?.ToString() ?? "Unknown");
-
-                var BusinessDetailJson = RelayDataHelper.GetValueJson(Data, "BusinessDetails");
-
-                if (!string.IsNullOrEmpty(FormKey))
-                {
-                    SetupViewModel setupViewModel = new SetupViewModel
-                    {
-                        Referrer = Referrer,
-                        Api = Api,
-                        Token = Token,
-                        BusinessDetailsJson = BusinessDetailJson
-                    };
-
-                    return View("UpdateBusinessData", setupViewModel);
-                }
-
-                return View("index", "Home");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Kesalahan saat memproses setup api");
-                throw new Exception(ex.Message);
-            }
+            public string IntegrationType { get; set; } = "Simulation";
+            public int DeviceID { get; set; }
+            public string DeviceSerialNumber { get; set; } = string.Empty;
+            public string ActivationKey { get; set; } = string.Empty;
+            public string? DeviceModelName { get; set; }
+            public string? DeviceModelVersion { get; set; }
+            public int? DefaultMoneyType { get; set; }
+            public string? Api { get; set; }
+            public string? BusinessDetailsJson { get; set; }
         }
 
-        [HttpGet("Setup/UpdateBusinessData")]
-        public IActionResult UpdateBusinessData()
-        {
-            var svmJson = TempData["SetupViewModel"] as string;
-            if (string.IsNullOrEmpty(svmJson))
-            {
-                return Content("No TempData found.");
-            }
-
-            var viewModel = JsonConvert.DeserializeObject<SetupViewModel>(svmJson);
-            return View(viewModel);
-        }
-
+        /// <summary>The setup wizard. Reached from the relay when the business has no device yet.</summary>
         public IActionResult Register()
         {
-            SetupViewModel model = null;
-
-            if (TempData["SetupViewModel"] != null)
+            if (TempData["SetupViewModel"] is string json && JsonConvert.DeserializeObject<SetupViewModel>(json) is { } model)
             {
-                model = JsonConvert.DeserializeObject<SetupViewModel>(TempData["SetupViewModel"].ToString());
+                return View("Index", model);
             }
-
-            if (model == null)
-            {
-                return RedirectToAction("Index");
-            }
-            return View("Index", model); // This will return the Index view with the model
+            return RedirectToAction("Index", "Home");
         }
 
-
-        [HttpGet("setup/GetCfData")]
-        public IActionResult CustomFieldJson()
-        {
-            try
-            {
-                string jsonData = Utils.ReadEmbeddedResource("cfData.json");
-                return Content(jsonData, "application/json");
-            }
-            catch (Exception ex)
-            {
-                return BadRequest($"Failed to load resource: {ex.Message}");
-            }
-        }
-
+        /// <summary>Step 1: ask ZIMRA who the device belongs to, so the user can confirm before registering.</summary>
         [HttpPost("setup/verifytaxpayer")]
-        public async Task<IActionResult> VerifyTaxPayerInformation([FromBody] VerifyTaxPayerDto verifyTaxPayerDto)
+        public async Task<IActionResult> VerifyTaxPayerInformation([FromBody] DeviceSetupRequest request)
         {
-            if (!ModelState.IsValid)
+            if (!TryValidate(request, out var environment, out string error))
             {
-                return BadRequest(new { Errors = "Invalid input data" });
+                return BadRequest(new { Error = error });
             }
 
             try
             {
-                VerifyTaxpayerInformationRequest verifyTaxpayerInformationRequest = new VerifyTaxpayerInformationRequest
+                using ApiHelper client = _clientFactory.CreatePublicClient(environment);
+                ServerResponse response = await client.VerifyTaxpayerInformationAsync(request.DeviceID, new VerifyTaxpayerInformationRequest
                 {
-                    ActivationKey = verifyTaxPayerDto.ActivationKey,
-                    DeviceSerialNo = verifyTaxPayerDto.DeviceSerialNumber
-                };
+                    ActivationKey = request.ActivationKey,
+                    DeviceSerialNo = request.DeviceSerialNumber
+                });
 
-                PlatformType integrationType = (PlatformType)Enum.Parse(typeof(PlatformType), verifyTaxPayerDto.IntegrationType);
-                using ApiHelper apiHelper = _clientFactory.CreatePublicClient(integrationType);
-                ServerResponse serverResponse = await apiHelper.VerifyTaxpayerInformationAsync(
-                    verifyTaxPayerDto.DeviceID,
-                    verifyTaxpayerInformationRequest
-                );
-
-                if (serverResponse.StatusCode == HttpStatusCode.OK)
+                if (!response.IsSuccess)
                 {
-                    return Ok(serverResponse.ResponseContent);
+                    return BadRequest(new { Error = "ZIMRA did not recognise this device: " + response.DescribeError() });
                 }
 
-                return BadRequest(new { Errors = serverResponse.GetContentAsString() });
+                return Content(response.ResponseContent, "application/json");
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
             {
-                return StatusCode(500, new { Error = $"Internal server error: {ex.Message}" });
+                return StatusCode(502, new { Error = "ZIMRA could not be reached: " + ex.Message });
             }
         }
 
-        [HttpPost("setup/registerdevice")]
-        public async Task<IActionResult> RegisterDeviceAsync([FromBody] DeviceRegistrationDto deviceRegistration)
+        /// <summary>
+        /// Step 2: everything else in one call. Generates the key on the server, registers the device with ZIMRA,
+        /// fetches its configuration and returns what the browser has to store in Manager.
+        /// </summary>
+        [HttpPost("setup/complete")]
+        public async Task<IActionResult> Complete([FromBody] DeviceSetupRequest request)
         {
-            if (!ModelState.IsValid)
+            if (!TryValidate(request, out var environment, out string error))
             {
-                var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).ToList();
-                return BadRequest(new { Errors = errors });
-            }
-
-            if (deviceRegistration == null || string.IsNullOrEmpty(deviceRegistration.CommonName))
-            {
-                return BadRequest(new { Errors = "Common name is required." });
+                return BadRequest(new { Error = error });
             }
 
             try
             {
-                string errMessage = string.Empty;
+                string modelName = string.IsNullOrWhiteSpace(request.DeviceModelName) ? "Server" : request.DeviceModelName.Trim();
+                string modelVersion = string.IsNullOrWhiteSpace(request.DeviceModelVersion) ? "v1" : request.DeviceModelVersion.Trim();
+                string activationHash = DeviceStore.HashToken(request.ActivationKey.Trim());
 
-                var (generatedCsr, privateKey) = RSA_CryptoHelper.GenerateCSR(deviceRegistration.CommonName);
+                var device = await _store.FindAsync(environment, request.DeviceID);
 
-                // Register Device
-                RegisterDeviceRequest registerDeviceRequest = new RegisterDeviceRequest
+                // Setup was run before with the same activation key (for example the save in Manager failed):
+                // the device is already registered, so only hand out a new link.
+                bool alreadyRegistered = device != null && !string.IsNullOrEmpty(device.ProtectedPfx) &&
+                    string.Equals(device.ActivationKeyHash, activationHash, StringComparison.Ordinal);
+
+                if (!alreadyRegistered)
                 {
-                    ActivationKey = deviceRegistration.ActivationKey,
-                    CertificateRequest = generatedCsr
-                };
+                    string commonName = $"ZIMRA-{request.DeviceSerialNumber.Trim()}-{request.DeviceID.ToString().PadLeft(10, '0')}";
+                    var (csr, privateKey) = RSA_CryptoHelper.GenerateCSR(commonName);
 
-                PlatformType integrationType = (PlatformType)Enum.Parse(typeof(PlatformType), deviceRegistration.IntegrationType);
+                    using ApiHelper publicClient = _clientFactory.CreatePublicClient(environment);
+                    ServerResponse registered = await publicClient.RegisterDeviceAsync(request.DeviceID, modelName, modelVersion,
+                        new RegisterDeviceRequest { ActivationKey = request.ActivationKey.Trim(), CertificateRequest = csr });
 
-                using ApiHelper apiHelper = _clientFactory.CreatePublicClient(integrationType);
-                ServerResponse serverResponse = await apiHelper.RegisterDeviceAsync(deviceRegistration.DeviceID, deviceRegistration.DeviceModelName, deviceRegistration.DeviceModelVersion, registerDeviceRequest);
+                    if (!registered.IsSuccess)
+                    {
+                        return BadRequest(new { Error = "ZIMRA did not register the device: " + registered.DescribeError() });
+                    }
 
-                if (serverResponse.StatusCode == HttpStatusCode.OK)
-                {
-                    var deviceCertificate = Utilities.CleanBase64String(serverResponse.GetContentAs<RegisterDeviceResponse>().Certificate);
+                    string certificate = Utilities.CleanBase64String(registered.GetContentAs<RegisterDeviceResponse>().Certificate);
                     string cleanKey = Utilities.CleanBase64String(privateKey);
-                    string pfx = Utilities.GeneratePfx(cleanKey, deviceCertificate, (string)null);
 
-                    // The private key stays on the server. The browser only receives a link to the device.
-                    var device = await _store.FindAsync(integrationType, deviceRegistration.DeviceID);
                     if (device == null)
                     {
-                        device = new Device { DeviceID = deviceRegistration.DeviceID, Environment = integrationType };
+                        device = new Device { DeviceID = request.DeviceID, Environment = environment };
                         _db.Devices.Add(device);
                     }
 
-                    device.SerialNumber = deviceRegistration.DeviceSerialNumber ?? string.Empty;
-                    device.ModelName = deviceRegistration.DeviceModelName;
-                    device.ModelVersion = deviceRegistration.DeviceModelVersion;
+                    // The private key is created here and never leaves the server.
                     device.ProtectedPrivateKey = _store.Protect(cleanKey);
-                    device.ProtectedPfx = _store.Protect(pfx);
-                    device.DeviceCertificate = deviceCertificate;
-                    device.GeneratedCsr = Utilities.CleanBase64String(generatedCsr);
+                    device.ProtectedPfx = _store.Protect(Utilities.GeneratePfx(cleanKey, certificate, null));
+                    device.DeviceCertificate = certificate;
+                    device.GeneratedCsr = Utilities.CleanBase64String(csr);
+                    device.ActivationKeyHash = activationHash;
                     device.IsActive = false;
-                    await _db.SaveChangesAsync();
-
-                    string deviceLink = await _store.IssueLinkAsync(device);
-
-                    var response = new
-                    {
-                        GeneratedCsr = device.GeneratedCsr,
-                        DeviceCertificate = deviceCertificate,
-                        DeviceLink = deviceLink
-                    };
-
-                    return Ok(response);
                 }
-                else
+
+                device!.SerialNumber = request.DeviceSerialNumber.Trim();
+                device.ModelName = modelName;
+                device.ModelVersion = modelVersion;
+                if (request.DefaultMoneyType is { } moneyType && Enum.IsDefined(typeof(MoneyType), moneyType))
                 {
-                    errMessage = serverResponse.GetFullResponseAsJson();
+                    device.DefaultMoneyType = moneyType;
                 }
-
-                return BadRequest(new { Errors = errMessage });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { Errors = "Error generating CSR: " + ex.Message });
-            }
-        }
-
-        [HttpPost("setup/getconfig")]
-        public async Task<IActionResult> GetDeviceConfig([FromBody] GetConfigDto getConfigDTO)
-        {
-            if (!ModelState.IsValid)
-            {
-                var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).ToList();
-                return BadRequest(new { Errors = errors });
-            }
-
-            var device = await _store.FindByLinkAsync(getConfigDTO?.DeviceLink, requireActive: false);
-            if (device == null)
-            {
-                return BadRequest(new { Errors = "The device is not registered on this server yet. Register the device first." });
-            }
-
-            try
-            {
-                string errMessage = string.Empty;
+                await _db.SaveChangesAsync();
 
                 using var client = _clientFactory.CreateDeviceClient(device.Environment, device.DeviceID, device.ModelName, device.ModelVersion, _store.Unprotect(device.ProtectedPfx));
-
-                ServerResponse serverResponse = await client.GetConfigAsync();
-
-                if (serverResponse.StatusCode == HttpStatusCode.OK)
+                ServerResponse configResponse = await client.GetConfigAsync();
+                if (!configResponse.IsSuccess)
                 {
-                    GetConfigResponse getConfigResponse = serverResponse.GetContentAs<GetConfigResponse>();
-
-                    device.ConfigJson = JsonConvert.SerializeObject(getConfigResponse);
-                    device.ConfigFetchedUtc = DateTime.UtcNow;
-                    device.CertificateValidTillUtc = getConfigResponse.CertificateValidTill.UtcDateTime;
-                    await _db.SaveChangesAsync();
-
-                    var response = new
-                    {
-                        DeviceOperatingMode = getConfigResponse.DeviceOperatingMode,
-                        ApplicableTaxes = string.Join("#", getConfigResponse.ApplicableTaxes.Select(x => $"{x.TaxID} - {x.TaxName} - {x.TaxPercent}")),
-                        TaxPayerDayMaxHrs = getConfigResponse.TaxPayerDayMaxHrs,
-                        TaxpayerDayEndNotificationHrs = getConfigResponse.TaxpayerDayEndNotificationHrs,
-                        CertificateValidTill = getConfigResponse.CertificateValidTill,
-                        QrUrl = getConfigResponse.QrUrl
-                    };
-
-                    return Ok(response);
-                }
-                else
-                {
-                    errMessage = serverResponse.GetContentAsString();
+                    return BadRequest(new { Error = "The device is registered, but ZIMRA did not return its configuration: " + configResponse.DescribeError() + " Click the button again to retry." });
                 }
 
-                Console.WriteLine(errMessage);
+                GetConfigResponse config = configResponse.GetContentAs<GetConfigResponse>();
+                var info = InfoFromConfig(device, config);
 
-                return BadRequest(new { Errors = errMessage });
+                device.ConfigJson = JsonConvert.SerializeObject(config);
+                device.ConfigFetchedUtc = DateTime.UtcNow;
+                _store.ApplyCertificateInfo(device, info);
+                device.IsActive = true;
+                await _db.SaveChangesAsync();
+
+                string deviceLink = await _store.IssueLinkAsync(device);
+                _logger.LogInformation("Device {DeviceID} ({Environment}) set up", device.DeviceID, device.Environment);
+
+                // Start from the business details Manager relayed, so nothing the user entered there is lost.
+                string businessDetails = string.IsNullOrWhiteSpace(request.BusinessDetailsJson) ? "{}" : request.BusinessDetailsJson;
+                businessDetails = RelayDataHelper.UpdateOrCreateField(businessDetails, "Name", info.TaxPayerName ?? string.Empty);
+                businessDetails = RelayDataHelper.UpdateOrCreateField(businessDetails, "Address", info.ToBusinessAddress());
+
+                var payload = new
+                {
+                    DeviceLink = deviceLink,
+                    TaxPayerName = info.TaxPayerName,
+                    Business = ManagerWriteBack.BusinessLink(request.Api ?? string.Empty, businessDetails, deviceLink),
+                    Records = ManagerSetupData.Build(device),
+                };
+                return Content(JsonConvert.SerializeObject(payload), "application/json");
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
             {
-                return BadRequest(new { Errors = "Error Get Device Configuration: " + ex.Message });
+                return StatusCode(502, new { Error = "ZIMRA could not be reached: " + ex.Message + " Click the button again to retry." });
             }
         }
 
-
-        [HttpPost("setup/savecertificate")]
-        public async Task<IActionResult> SaveCertificate(SetupViewModel viewModel)
+        private static CertificateInfo InfoFromConfig(Device device, GetConfigResponse config)
         {
-            var device = await _store.FindByLinkAsync(viewModel.DeviceLink, requireActive: false);
-            if (device == null)
+            return new CertificateInfo
             {
-                return BadRequest("The device is not registered on this server. Start the registration again from Manager.");
-            }
+                IntegrationType = device.Environment,
+                DeviceID = device.DeviceID,
+                DeviceSerialNumber = device.SerialNumber,
+                DeviceModelName = device.ModelName,
+                DeviceModelVersion = device.ModelVersion,
+                CommonName = $"ZIMRA-{device.SerialNumber}-{device.DeviceID.ToString().PadLeft(10, '0')}",
+                TaxPayerName = config.TaxPayerName,
+                TaxPayerTIN = config.TaxPayerTIN,
+                VatNumber = config.VatNumber ?? string.Empty,
+                DeviceBranchName = config.DeviceBranchName,
+                Province = config.DeviceBranchAddress?.Province ?? string.Empty,
+                City = config.DeviceBranchAddress?.City ?? string.Empty,
+                Street = config.DeviceBranchAddress?.Street ?? string.Empty,
+                HouseNo = config.DeviceBranchAddress?.HouseNo ?? string.Empty,
+                PhoneNo = config.DeviceBranchContacts?.PhoneNo ?? string.Empty,
+                Email = config.DeviceBranchContacts?.Email ?? string.Empty,
+                DeviceOperatingMode = (int)config.DeviceOperatingMode,
+                ApplicableTaxes = string.Join("#", config.ApplicableTaxes.Select(x => $"{x.TaxID} - {x.TaxName} - {x.TaxPercent}")),
+                TaxPayerDayMaxHrs = config.TaxPayerDayMaxHrs,
+                TaxpayerDayEndNotificationHrs = config.TaxpayerDayEndNotificationHrs,
+                QrUrl = config.QrUrl,
+                CertificateValidTill = config.CertificateValidTill,
+            };
+        }
 
-            CertificateInfo certificateInfo = viewModel.CertificateInfo;
+        private static bool TryValidate(DeviceSetupRequest? request, out PlatformType environment, out string error)
+        {
+            environment = PlatformType.Simulation;
+            error = string.Empty;
 
-            // Key material never comes from the browser; whatever was posted in these fields is ignored.
-            certificateInfo.PrivateKey = string.Empty;
-            certificateInfo.Base64Pfx = string.Empty;
-            certificateInfo.DeviceCertificate = string.Empty;
-            certificateInfo.GeneratedCSR = string.Empty;
-            certificateInfo.DeviceID = device.DeviceID;
-            certificateInfo.IntegrationType = device.Environment;
+            if (request == null) { error = "No data received."; return false; }
+            if (!Enum.TryParse(request.IntegrationType, out environment)) { error = "Choose Test or Production."; return false; }
+            if (request.DeviceID <= 0) { error = "Enter the Device ID from ZIMRA."; return false; }
+            if (string.IsNullOrWhiteSpace(request.DeviceSerialNumber)) { error = "Enter the device Serial Number."; return false; }
+            if (string.IsNullOrWhiteSpace(request.ActivationKey)) { error = "Enter the Activation Key."; return false; }
+            return true;
+        }
 
-            _store.ApplyCertificateInfo(device, certificateInfo);
-            device.IsActive = true;
-            await _db.SaveChangesAsync();
-
-            _logger.LogInformation("Device {DeviceID} ({Environment}) registered", device.DeviceID, device.Environment);
-
-            // Start from the business details Manager relayed, so nothing the user entered there is lost.
-            string businessDetails = string.IsNullOrWhiteSpace(viewModel.BusinessDetailsJson) ? "{}" : viewModel.BusinessDetailsJson;
-            businessDetails = RelayDataHelper.UpdateOrCreateField(businessDetails, "Name", certificateInfo.TaxPayerName ?? string.Empty);
-            businessDetails = RelayDataHelper.UpdateOrCreateField(businessDetails, "Address", certificateInfo.ToBusinessAddress());
-
-            var call = ManagerWriteBack.BusinessLink(viewModel.Api ?? string.Empty, businessDetails, viewModel.DeviceLink);
-
-            viewModel.BusinessDetails = call.Payload;
-            viewModel.BusinessDetailsJson = call.Payload;
-            viewModel.CertificateInfo = DeviceStore.WithoutSecrets(certificateInfo);
-            viewModel.CertificateInfo.DeviceCertificate = device.DeviceCertificate;
-            viewModel.IsFileReady = true;
-
-            return View("index", viewModel);
+        /// <summary>Custom fields, theme and tax codes to create in Manager, for a device that is already set up.</summary>
+        [HttpPost("setup/records")]
+        public async Task<IActionResult> Records([FromForm] string deviceLink)
+        {
+            var device = await _store.FindByLinkAsync(deviceLink);
+            if (device == null) return BadRequest(new { Error = "Unknown device." });
+            return Content(ManagerSetupData.Build(device).ToString(Formatting.None), "application/json");
         }
     }
 }

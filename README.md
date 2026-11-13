@@ -54,21 +54,28 @@ Run one instance only; the receipt chain of a device is serialised inside the pr
 ### 2. Connecting a Manager Business
 1. In **Manager.IO**, enable **Sales Invoices** and create an invoice.
 2. In the invoice form settings, tick **Relay** and enter your server's relay URL, for example `https://your-server/relay`.
-3. Open the invoice and click **Relay**. A business without a device is taken to the **Setup** page.
-4. Click **Update Business Data** to create the custom fields.
-5. Enter the Device ID, Serial Number and Activation Key from ZIMRA, then click **Verify Taxpayer**, **Register Device** and **GetConfig**.
-6. Click **Save and Finish**. The device is now stored on the server and linked to the business.
+3. Open the invoice and click **Relay**. A business without a device is taken to the setup page.
+4. Enter the **Device ID**, **Serial Number** and **Activation Key** from ZIMRA and click **Check device**.
+5. Confirm the taxpayer ZIMRA shows and click **Yes, connect this business**.
+
+That one click registers the device with ZIMRA, creates the custom fields, the invoice theme and the tax codes in Manager, and links the business to the device. The tax codes are created from the taxes ZIMRA configured for the device, so they carry the right tax IDs. On the test environment a few sample items and customers are added as well.
+
+On the setup page you can also choose a **default payment type** (for example Cash, or Credit for invoices not paid yet). It is used for every invoice that does not state how it was paid, and can be changed later from the receipt page.
 
 ---
 
 ### 3. Fiscalising Invoices
 1. Set the base currency (Settings - Currencies - Base Currency) to `ZWG` or `USD`.
-2. Create the invoice:
-   - Every line needs a tax code and, for VAT registered taxpayers, an **HS Code** (on the line or on the inventory item).
-   - Tax codes named like `Standard rated 15% — 3 —` carry the ZIMRA tax ID. Other tax codes are matched to the ZIMRA taxes by their rate.
-   - Fill in **Payment Type** and **Payment Amount**; the amounts must add up to the invoice total.
-   - A customer needs both a Registered Name and a TIN, or neither.
-3. Click **Relay**. That is all: the fiscal day is opened automatically, and you return to the invoice with its QR code.
+2. In the invoice form settings, tick **Custom Theme** and choose `ZimTheme`.
+3. Create the invoice with the tax codes created by setup. VAT registered taxpayers need an **HS Code** on each line or on the inventory item.
+4. Click **Relay**. That is all: the fiscal day is opened automatically, and you return to the invoice with its QR code.
+
+Payment is optional on the invoice:
+- nothing entered: the device's default payment type is used for the full total;
+- only a **Payment Type**: the full total is reported as paid that way;
+- types and amounts (for split payments): the amounts must add up to the invoice total.
+
+A customer needs both a Registered Name and a TIN, or neither. Tax codes you made yourself work too: they are matched to the ZIMRA taxes by their rate.
 
 If something is missing, a page lists what to fix in plain words and nothing is sent.
 

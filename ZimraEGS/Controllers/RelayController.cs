@@ -87,7 +87,14 @@ namespace ZimraEGS.Controllers
                 var result = await _fiscal.FiscaliseAsync(device.Id, relay);
                 if (!result.Success)
                 {
-                    return ShowProblem(referrer, result.ProblemTitle ?? "The invoice could not be sent to ZIMRA", [.. result.Problems]);
+                    return View("Problem", new ProblemViewModel
+                    {
+                        Referrer = referrer,
+                        Title = result.ProblemTitle ?? "The invoice could not be sent to ZIMRA",
+                        Problems = result.Problems,
+                        DeviceLink = deviceLink,
+                        DefaultMoneyType = device.DefaultMoneyType
+                    });
                 }
 
                 var row = result.Receipt!;
@@ -120,6 +127,7 @@ namespace ZimraEGS.Controllers
         {
             model.FiscalDayStatus = device.FiscalDayStatus.ToString();
             model.LastCloseDayError = device.LastCloseDayError;
+            model.DefaultMoneyType = device.DefaultMoneyType;
             if (model.FiscalDayNo == 0) model.FiscalDayNo = device.FiscalDayNo;
         }
 

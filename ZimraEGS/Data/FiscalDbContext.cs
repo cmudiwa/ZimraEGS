@@ -57,6 +57,15 @@ namespace ZimraEGS.Data
 
         public string? LastCloseDayError { get; set; }
 
+        /// <summary>ZIMRA money type (MoneyType value) used when an invoice does not say how it was paid.</summary>
+        public int? DefaultMoneyType { get; set; }
+
+        /// <summary>
+        /// SHA-256 of the activation key the device was registered with. Lets the owner run setup again
+        /// (for example after a failed save in Manager) without registering with ZIMRA a second time.
+        /// </summary>
+        public string? ActivationKeyHash { get; set; }
+
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;
 

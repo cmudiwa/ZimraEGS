@@ -10,13 +10,13 @@
         <div class="col-md-8 mb-4">
             <div class="card card-custom">
                 <div class="card-header section-header">
-                    <h5 class="mb-0">Fiscal day @Model.FiscalDayNo</h5>
+                    <h5 class="mb-0">@(string.IsNullOrEmpty(Model.Title) ? $"Fiscal day {Model.FiscalDayNo}" : Model.Title)</h5>
                 </div>
                 <div class="card-body">
                     <div class="alert @(Model.Success ? "alert-success" : "alert-warning")">@Model.Message</div>
-                    @if (Model.Success)
+                    @if (!string.IsNullOrEmpty(Model.Hint))
                     {
-                        <p class="text-muted">A new fiscal day opens automatically with the next invoice you relay.</p>
+                        <p class="text-muted">@Model.Hint</p>
                     }
                     <a class="btn btn-secondary btn-sm @(string.IsNullOrEmpty(back) ? "disabled" : "")" href="@back">Back to Manager</a>
                 </div>

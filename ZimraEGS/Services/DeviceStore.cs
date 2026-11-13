@@ -177,6 +177,13 @@ namespace ZimraEGS.Services
             catch (JsonException) { return null; }
         }
 
+        public async Task SetDefaultMoneyTypeAsync(Device device, int? moneyType)
+        {
+            device.DefaultMoneyType = moneyType;
+            device.UpdatedUtc = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+        }
+
         /// <summary>Issues a fresh link secret for the device and returns the link to store in Manager.</summary>
         public async Task<string> IssueLinkAsync(Device device)
         {

@@ -107,6 +107,11 @@
                         }
                     </div>
                     <p class="text-muted small mt-3 mb-0">The fiscal day is closed automatically every night. You only need the button to close it earlier.</p>
+                    @if (!Model.AutoReturn)
+                    {
+                        <hr />
+                        <partial name="_DeviceSettings" model="(Model.DeviceLink, Model.Referrer, Model.DefaultMoneyType)" />
+                    }
                 </div>
             </div>
         </div>

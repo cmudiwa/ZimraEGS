@@ -23,6 +23,9 @@ namespace ZimraEGS.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("ActivationKeyHash")
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("CarriedSummaryFiscalDayNo")
                         .HasColumnType("INTEGER");
 
@@ -40,6 +43,9 @@ namespace ZimraEGS.Data.Migrations
 
                     b.Property<DateTime>("CreatedUtc")
                         .HasColumnType("TEXT");
+
+                    b.Property<int?>("DefaultMoneyType")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("DeviceCertificate")
                         .IsRequired()

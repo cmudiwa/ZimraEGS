@@ -153,7 +153,8 @@ namespace ZimraEGS.Services
                 // 3. Build and check the receipt before anything is numbered.
                 var info = DeviceStore.GetInfo(device);
                 var config = DeviceStore.GetConfig(device);
-                var draft = ReceiptBuilder.Build(relay, config, !string.IsNullOrWhiteSpace(config?.VatNumber ?? info.VatNumber));
+                var draft = ReceiptBuilder.Build(relay, config, !string.IsNullOrWhiteSpace(config?.VatNumber ?? info.VatNumber),
+                    device.DefaultMoneyType is { } m && Enum.IsDefined(typeof(MoneyType), m) ? (MoneyType)m : null);
                 if (draft.Problems.Count > 0)
                 {
                     return new FiscaliseResult

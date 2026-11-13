@@ -24,6 +24,11 @@
                     }
                     <p class="text-muted">Nothing was changed in Manager. Fix the points above and click Relay on the invoice again.</p>
                     <a class="btn btn-secondary btn-sm @(string.IsNullOrEmpty(back) ? "disabled" : "")" href="@back">Back to Manager</a>
+                    @if (!string.IsNullOrEmpty(Model.DeviceLink))
+                    {
+                        <hr />
+                        <partial name="_DeviceSettings" model="(Model.DeviceLink, Model.Referrer, Model.DefaultMoneyType)" />
+                    }
                 </div>
             </div>
         </div>
