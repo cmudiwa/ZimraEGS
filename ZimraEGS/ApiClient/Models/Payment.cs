@@ -11,7 +11,7 @@
         public MoneyType MoneyTypeCode { get; set; }
 
         [Newtonsoft.Json.JsonProperty("paymentAmount", Required = Newtonsoft.Json.Required.Always)]
-        public double PaymentAmount { get; set; }
+        public decimal PaymentAmount { get; set; }
 
     }
 

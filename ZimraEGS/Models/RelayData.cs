@@ -1,8 +1,9 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using ZimraEGS.ApiClient.Enums;
 using ZimraEGS.ApiClient.Helpers;
 using ZimraEGS.ApiClient.Models;
 using ZimraEGS.Helpers;
+using ZimraEGS.Services;
 
 namespace ZimraEGS.Models
 {
@@ -16,7 +17,7 @@ namespace ZimraEGS.Models
 
         public long EGSVersion { get; private set; }
 
-        public double InvoiceTotal { get; private set; } = 0;
+        public decimal InvoiceTotal { get; private set; } = 0;
         public string ApprovalStatus { get; set; } = string.Empty;
         public int InvReceiptGlobalNo { get; private set; } = 0;
 
@@ -25,9 +26,14 @@ namespace ZimraEGS.Models
         public string BusinessDetailJson { get; set; } = string.Empty;
         public string InvoiceJson { get; set; } = string.Empty;
 
-        public BusinessReference BusinessReference { get; set; } = new BusinessReference();
-        public FiscalDaySummary FiscalDaySummary { get; set; }
-        public CertificateInfo CertificateInfo { get; set; }
+        // State kept in Manager custom fields by versions before the server-side database.
+        // Only read to import an existing device; never written to any more.
+        public BusinessReference? LegacyBusinessReference { get; private set; }
+        public FiscalDaySummary? LegacyFiscalDaySummary { get; private set; }
+        public CertificateInfo? LegacyCertificateInfo { get; private set; }
+
+        /// <summary>Raw content of the device custom field: either a device link or a legacy certificate blob.</summary>
+        public string DeviceLinkRaw { get; private set; } = string.Empty;
 
         public ReceiptType ReceiptType { get; private set; } = ReceiptType.FiscalInvoice;
         public string CurrencyCode { get; private set; } = string.Empty;
@@ -44,12 +50,13 @@ namespace ZimraEGS.Models
 
         public string ReceiptPrintForm { get; private set; } = string.Empty;
         public string PaymentType1 { get; private set; } = string.Empty;
-        public double PaymentAmount1 { get; private set; } = 0;
+        public decimal PaymentAmount1 { get; private set; } = 0;
         public string PaymentType2 { get; private set; } = string.Empty;
-        public double PaymentAmount2 { get; private set; } = 0;
+        public decimal PaymentAmount2 { get; private set; } = 0;
 
         public string ReceiptQrCode { get; set; } = string.Empty;
         public string VerificationCode { get; set; } = string.Empty;
+        /// <summary>FDMS receipt ID of the invoice a credit or debit note refers to. 0 when unknown.</summary>
         public long ReceiptID { get; set; }
 
         public string BuyerRegisterName { get; private set; } = string.Empty;
@@ -64,11 +71,7 @@ namespace ZimraEGS.Models
         public string BuyerHouseNo { get; private set; } = string.Empty;
 
         public ManagerInvoice ManagerInvoice { get; private set; }
-        public GetStatusResponse DeviceStatus { get; set; }
-        public GetConfigResponse DeviceConfig { get; set; }
-
-        public Receipt Receipt { get; set; }
-        public InvoiceReference ReceiptReference { get; set; }
+        public InvoiceReference? ReceiptReference { get; set; }
 
         public RelayData() { }
         public RelayData(Dictionary<string, string> formData)
@@ -80,7 +83,7 @@ namespace ZimraEGS.Models
             Token = Utils.GetValue(formData, "Token");
 
             string invoiceView = Utils.GetValue(formData, "View");
-            InvoiceTotal = RelayDataHelper.ParseTotalValue(invoiceView);
+            InvoiceTotal = (decimal)RelayDataHelper.ParseTotalValue(invoiceView);
 
             BusinessDetailJson = RelayDataHelper.GetValueJson(Data, "BusinessDetails");
             InitializeBusinessData(BusinessDetailJson);
@@ -88,6 +91,10 @@ namespace ZimraEGS.Models
             InvoiceJson = RelayDataHelper.FindStringValueInJson(Data, FormKey);
 
             var mergedJson = RelayDataHelper.GetJsonDataByGuid(Data, FormKey);
+            if (string.IsNullOrEmpty(InvoiceJson) || string.IsNullOrEmpty(mergedJson))
+            {
+                throw new InvalidOperationException("The relayed data does not contain the invoice. Relay from the invoice or credit note view screen.");
+            }
             ManagerInvoice = JsonConvert.DeserializeObject<ManagerInvoice>(mergedJson);
 
             InitializeInvoiceData(mergedJson);
@@ -96,22 +103,23 @@ namespace ZimraEGS.Models
         }
         private void InitializeBusinessData(string jsonBusiness)
         {
-            string brf = RelayDataHelper.GetStringCustomField2Value(jsonBusiness, ManagerCustomField.BusinessReferenceGuid);
-            if (!string.IsNullOrEmpty(brf))
-            {
-                BusinessReference = JsonConvert.DeserializeObject<BusinessReference>(brf);
-            }
+            DeviceLinkRaw = RelayDataHelper.GetStringCustomField2Value(jsonBusiness, ManagerCustomField.CertificateInfoGuid) ?? string.Empty;
 
-            string fds = RelayDataHelper.GetStringCustomField2Value(jsonBusiness, ManagerCustomField.FiscalDaySummaryGuid);
-            if (!string.IsNullOrEmpty(fds))
+            if (!string.IsNullOrEmpty(DeviceLinkRaw) && !DeviceLink.IsLink(DeviceLinkRaw))
             {
-                FiscalDaySummary = JsonConvert.DeserializeObject<FiscalDaySummary>(fds);
-            }
+                LegacyCertificateInfo = ObjectCompressor.DeserializeFromBase64String<CertificateInfo>(DeviceLinkRaw);
 
-            var base64CerInfo = RelayDataHelper.GetStringCustomField2Value(jsonBusiness, ManagerCustomField.CertificateInfoGuid);
-            if (!string.IsNullOrEmpty(base64CerInfo))
-            {
-                CertificateInfo = ObjectCompressor.DeserializeFromBase64String<CertificateInfo>(base64CerInfo);
+                string brf = RelayDataHelper.GetStringCustomField2Value(jsonBusiness, ManagerCustomField.BusinessReferenceGuid);
+                if (!string.IsNullOrWhiteSpace(brf))
+                {
+                    try { LegacyBusinessReference = JsonConvert.DeserializeObject<BusinessReference>(brf); } catch (JsonException) { }
+                }
+
+                string fds = RelayDataHelper.GetStringCustomField2Value(jsonBusiness, ManagerCustomField.FiscalDaySummaryGuid);
+                if (!string.IsNullOrWhiteSpace(fds))
+                {
+                    try { LegacyFiscalDaySummary = JsonConvert.DeserializeObject<FiscalDaySummary>(fds); } catch (JsonException) { }
+                }
             }
 
             EGSVersion = VersionHelper.GetNumberOnly(RelayDataHelper.GetStringCustomField2Value(jsonBusiness, ManagerCustomField.AppVersionGuid));
@@ -126,10 +134,7 @@ namespace ZimraEGS.Models
                 InvReceiptGlobalNo = GetIntValue(jsonInvoice, ManagerCustomField.ReceiptGlobalNoGuid);
                 ReceiptDate = GetDateTimeValue(jsonInvoice, ManagerCustomField.ReceiptDateGuid);
 
-                var receiptRef = RelayDataHelper.GetStringCustomField2Value(jsonInvoice, ManagerCustomField.ServerResponseGuid);
-                ReceiptReference = JsonConvert.DeserializeObject<InvoiceReference>(receiptRef);
-
-                //ReceiptID = ReceiptReference.SubmitReceiptResponse.ReceiptID;
+                ReceiptReference = ParseInvoiceReference(RelayDataHelper.GetStringCustomField2Value(jsonInvoice, ManagerCustomField.ServerResponseGuid));
             }
 
             PaymentType1 = RelayDataHelper.GetStringCustomField2Value(jsonInvoice, ManagerCustomField.PaymentType1Guid);
@@ -175,9 +180,8 @@ namespace ZimraEGS.Models
                 ReceiptRefNo = RelayDataHelper.FindStringValueInJson(jsonInvoice, "Reference", "RefInvoice");
                 ReceiptRefDate = GetDateTimeValue(jsonInvoice, ManagerCustomField.ReceiptDateGuid, "RefInvoice") ?? DateTimeOffset.MinValue;
 
-                var receiptRefRef = RelayDataHelper.GetStringCustomField2Value(jsonInvoice, ManagerCustomField.ServerResponseGuid, "RefInvoice");
-                InvoiceReference ReceiptReferenceRef = JsonConvert.DeserializeObject<InvoiceReference>(receiptRefRef);
-                ReceiptID = ReceiptReferenceRef.SubmitReceiptResponse.ReceiptID;
+                var referenced = ParseInvoiceReference(RelayDataHelper.GetStringCustomField2Value(jsonInvoice, ManagerCustomField.ServerResponseGuid, "RefInvoice"));
+                ReceiptID = referenced?.SubmitReceiptResponse?.ReceiptID ?? 0;
 
                 ReceiptType = ReceiptType.CreditNote;
 
@@ -193,158 +197,20 @@ namespace ZimraEGS.Models
         {
             return (int)RelayDataHelper.GetDecimalCustomField2Value(json, key, rootKey);
         }
-        private double GetDoubleValue(string json, string key, string rootKey = null)
+        private decimal GetDoubleValue(string json, string key, string rootKey = null)
         {
-            return (double)RelayDataHelper.GetDecimalCustomField2Value(json, key, rootKey);
+            return (decimal)RelayDataHelper.GetDecimalCustomField2Value(json, key, rootKey);
+        }
+
+        private static InvoiceReference? ParseInvoiceReference(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return null;
+            try { return JsonConvert.DeserializeObject<InvoiceReference>(json); }
+            catch (JsonException) { return null; }
         }
         private DateTimeOffset? GetDateTimeValue(string json, string key, string rootKey = null)
         {
             return DateTimeOffset.TryParse(RelayDataHelper.GetStringCustomField2Value(json, key, rootKey), out DateTimeOffset value) ? value : null;
-        }
-
-        public OpenDayViewModel GetOpenDayViewModel()
-        {
-            BusinessReference businessReference = BusinessReference ?? new BusinessReference();
-
-            var viewModel = new OpenDayViewModel
-            {
-                DeviceID = CertificateInfo.DeviceID,
-                DeviceModelName = CertificateInfo.DeviceModelName,
-                DeviceModelVersion = CertificateInfo.DeviceModelVersion,
-                DeviceSerialNumber = CertificateInfo.DeviceSerialNumber,
-                LastFiscalDayNo = DeviceStatus.LastFiscalDayNo ?? 0,
-                Base64Pfx = CertificateInfo.Base64Pfx,
-                IntegrationType = CertificateInfo.IntegrationType,
-                BusinessDetailJson = BusinessDetailJson,
-                LastReceiptCounter = businessReference.LastReceiptCounter,
-                LastReceiptHash = businessReference.LastReceiptHash,
-                FiscalDayStatus = DeviceStatus.FiscalDayStatus,
-                LastReceiptGlobalNo = DeviceStatus.LastReceiptGlobalNo,
-                DeviceStatusJson = JsonConvert.SerializeObject(DeviceStatus, Formatting.Indented),
-                Api = Api,
-                Token = Token,
-                Referrer = Referrer
-            };
-
-            return viewModel;
-        }
-
-        public CloseDayViewModel GetCloseDayViewModel()
-        {
-            var viewModel = new CloseDayViewModel
-            {
-                BusinessDetailJson = BusinessDetailJson,
-                Api = Api,
-                Token = Token,
-                Referrer = Referrer,
-            };
-
-            return viewModel;
-        }
-
-        public ApprovedInvoiceViewModel GetApprovedInvoiceViewModel()
-        {
-            DateTimeOffset fiscalDayEnd = BusinessReference.FiscalDayOpened.AddHours(CertificateInfo.TaxPayerDayMaxHrs);
-            TimeSpan timeDifference = TimeZoneHelper.GetSouthAfricaTime() - fiscalDayEnd;
-            bool TimeForCloseDay = timeDifference.TotalHours < CertificateInfo.TaxpayerDayEndNotificationHrs;
-
-            var viewModel = new ApprovedInvoiceViewModel
-            {
-                ReceiptReferenceJson = JsonConvert.SerializeObject(ReceiptReference, Formatting.Indented),
-                Referrer = Referrer,
-                ReceiptVerificationCode = VerificationCode,
-                ReceiptQrCode = ReceiptQrCode,
-                Api = Api,
-                Token = Token,
-                BusinessDetailJson = BusinessDetailJson,
-                FiscalDayStatus = DeviceStatus.FiscalDayStatus,
-                TimeForCloseDay = TimeForCloseDay
-            };
-
-            return viewModel;
-        }
-
-        public RelayDataViewModel GetRelayDataViewModel()
-        {
-            RelayDataViewModel viewModel = new RelayDataViewModel();
-
-            viewModel.Referrer = Referrer;
-            viewModel.FormKey = FormKey;
-            viewModel.Api = Api;
-            viewModel.Token = Token;
-            viewModel.BusinessDetailJson = BusinessDetailJson;
-            viewModel.InvoiceJson = InvoiceJson;
-
-            viewModel.DeviceID = CertificateInfo.DeviceID;
-            viewModel.DeviceSN = CertificateInfo.DeviceSerialNumber;
-            viewModel.DeviceModelName = CertificateInfo.DeviceModelName;
-            viewModel.DeviceModelVersion = CertificateInfo.DeviceModelVersion;
-
-            viewModel.Base64Pfx = CertificateInfo.Base64Pfx;
-            viewModel.PrivateKey = CertificateInfo.PrivateKey;
-            viewModel.IntegrationType = CertificateInfo.IntegrationType;
-
-
-            viewModel.ReceiptType = Receipt.ReceiptType;
-            viewModel.CurrencyCode = Receipt.ReceiptCurrency;
-
-            viewModel.FiscalDayStatus = DeviceStatus.FiscalDayStatus;
-            viewModel.FiscalDayNo = DeviceStatus.LastFiscalDayNo ?? 1;
-
-            viewModel.ReceiptGlobalNo = Receipt.ReceiptGlobalNo;
-            viewModel.ReceiptCounter = Receipt.ReceiptCounter;
-
-            viewModel.InvoiceNumber = Receipt.InvoiceNo;
-            viewModel.ReceiptDate = Receipt.ReceiptDate;
-
-            viewModel.BuyerRegisterName = Receipt.BuyerData.BuyerRegisterName;
-
-            viewModel.ReceiptNotes = ReceiptNotes;
-            viewModel.DeviceIDRef = DeviceIDRef;
-            viewModel.DeviceSNRef = DeviceSNRef;
-            viewModel.FiscalDayNoRef = FiscalDayNoRef;
-            viewModel.ReceiptCounterRef = ReceiptCounterRef;
-            viewModel.ReceiptGlobalNoRef = ReceiptGlobalNoRef;
-            viewModel.ReceiptRefNo = ReceiptRefNo;
-            viewModel.ReceiptRefDate = ReceiptRefDate;
-
-            viewModel.TaxAmount = Receipt.ReceiptTaxes.Sum(x => x.TaxAmount);
-            viewModel.AmountWithTax = Receipt.ReceiptTaxes.Sum(x => x.SalesAmountWithTax);
-
-            viewModel.InvoiceTotal = Receipt.ReceiptTotal;
-            viewModel.InvoiceRoundOff = (Receipt.ReceiptTotal - InvoiceTotal);
-
-            viewModel.ReceiptHash = Convert.ToBase64String(Receipt.ReceiptDeviceSignature.Hash);
-            viewModel.ReceiptSignature = Convert.ToBase64String(Receipt.ReceiptDeviceSignature.Signature);
-
-            string md5Signature = Utilities.ComputeMD5(Receipt.ReceiptDeviceSignature.Signature);
-
-            viewModel.ReceiptQrCode = CertificateInfo.QrUrl + '/' +
-                CertificateInfo.DeviceID.ToString().PadLeft(10, '0') +
-                Receipt.ReceiptDate.ToString("ddMMyyyy") +
-                Receipt.ReceiptGlobalNo.ToString().PadLeft(10, '0') +
-                md5Signature;
-
-            viewModel.TmpReceiptVerificationCode = string.Format("{0}-{1}-{2}-{3}",
-                md5Signature.Substring(0, 4),
-                md5Signature.Substring(4, 4),
-                md5Signature.Substring(8, 4),
-                md5Signature.Substring(12, 4));
-
-            viewModel.ReceiptJson = JsonConvert.SerializeObject(Receipt);
-
-            viewModel.BusinessReferenceJson = JsonConvert.SerializeObject(BusinessReference);
-            viewModel.FiscalDaySummaryJson = JsonConvert.SerializeObject(FiscalDaySummary);
-            viewModel.InvoiceReferenceJson = JsonConvert.SerializeObject(ReceiptReference);
-
-            DateTimeOffset fiscalDayEnd = BusinessReference.FiscalDayOpened.AddHours(CertificateInfo.TaxPayerDayMaxHrs);
-            TimeSpan timeDifference = TimeZoneHelper.GetSouthAfricaTime() - fiscalDayEnd;
-            viewModel.TimeForCloseDay = timeDifference.TotalHours < CertificateInfo.TaxpayerDayEndNotificationHrs;
-
-            viewModel.ReceiptErrors = ReceiptValidator.ValidateReceipt(Receipt, CertificateInfo.ApplicableTaxes);
-
-            return viewModel;
-
         }
     }
 }

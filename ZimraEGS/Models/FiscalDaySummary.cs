@@ -15,15 +15,15 @@ namespace ZimraEGS.Models
         public string ReceiptCurrency { get; set; } = "ZWG";
         public int TaxID { get; set; }
         public string? TaxPersen { get; set; }
-        public Double TaxAmount { get; set; } = 0;
-        public Double SalesAmountWithTax { get; set; } = 0;
-        public Double Amount => SalesAmountWithTax - TaxAmount;
+        public decimal TaxAmount { get; set; } = 0;
+        public decimal SalesAmountWithTax { get; set; } = 0;
+        public decimal Amount => SalesAmountWithTax - TaxAmount;
     }
     public class PaymentSummary
     {
         public int FiscalDayNo { get; set; } = 0;
         public string ReceiptCurrency { get; set; } = "ZWG";
         public MoneyType MoneyTypeCode { get; set; } = MoneyType.Other;
-        public Double PaymentAmount { get; set; } = 0;
+        public decimal PaymentAmount { get; set; } = 0;
     }
 }

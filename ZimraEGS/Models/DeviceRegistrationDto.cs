@@ -1,4 +1,4 @@
-﻿namespace ZimraEGS.Controllers
+namespace ZimraEGS.Controllers
 {
     public partial class SetupController
     {
@@ -23,16 +23,8 @@
 
         public class GetConfigDto
         {
-            public string IntegrationType { get; set; }
-            public int DeviceID { get; set; }
-            public string DeviceSerialNumber { get; set; }
-            public string DeviceModelName { get; set; }
-            public string DeviceModelVersion { get; set; }
-            public string DeviceCertificate { get; set; }
-            public string PrivateKey { get; set; }
-            public string Base64Pfx { get; set; }
-
+            /// <summary>Link returned by device registration; identifies the device held on the server.</summary>
+            public string DeviceLink { get; set; }
         }
-
     }
 }

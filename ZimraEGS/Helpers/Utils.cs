@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using System.Globalization;
 using System.Reflection;
 using System.Text;
@@ -35,6 +35,22 @@ namespace ZimraEGS.Helpers
             }
 
             throw new ArgumentException("Invalid referrer URL");
+        }
+
+        /// <summary>Returns the URL only when it is a plain http(s) address, so it is safe to navigate back to.</summary>
+        public static string SafeReturnUrl(string? url)
+        {
+            if (Uri.TryCreate(url, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+            {
+                return uri.ToString();
+            }
+            return string.Empty;
+        }
+
+        /// <summary>Serialises a value for embedding inside a script block.</summary>
+        public static string ToScriptJson(object? value)
+        {
+            return JsonConvert.SerializeObject(value, new JsonSerializerSettings { StringEscapeHandling = StringEscapeHandling.EscapeHtml });
         }
 
         public static string ReadEmbeddedResource(string resourceName)

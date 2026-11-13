@@ -56,7 +56,7 @@
         public ICollection<Payment> ReceiptPayments { get; set; } = new System.Collections.ObjectModel.Collection<Payment>();
 
         [Newtonsoft.Json.JsonProperty("receiptTotal", Required = Newtonsoft.Json.Required.Always)]
-        public double ReceiptTotal { get; set; }
+        public decimal ReceiptTotal { get; set; }
 
         [Newtonsoft.Json.JsonProperty("receiptPrintForm", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         [Newtonsoft.Json.JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]

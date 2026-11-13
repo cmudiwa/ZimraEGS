@@ -16,7 +16,7 @@
         public string FiscalCounterCurrency { get; set; }
 
         [Newtonsoft.Json.JsonProperty("fiscalCounterTaxPercent", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public double? FiscalCounterTaxPercent { get; set; }
+        public decimal? FiscalCounterTaxPercent { get; set; }
 
         [Newtonsoft.Json.JsonProperty("fiscalCounterTaxID", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public int? FiscalCounterTaxID { get; set; }
@@ -26,7 +26,7 @@
         public MoneyType? FiscalCounterMoneyType { get; set; }
 
         [Newtonsoft.Json.JsonProperty("fiscalCounterValue", Required = Newtonsoft.Json.Required.Always)]
-        public double FiscalCounterValue { get; set; }
+        public decimal FiscalCounterValue { get; set; }
 
     }
 

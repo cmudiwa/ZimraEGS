@@ -9,8 +9,31 @@ This guide aims to assist users in integrating and testing the ZimraEGS applicat
 ---
 
 ## What ZimraEGS Does
-1. **Data Conversion**: ZimraEGS receives data from the relay, converts it to the required ZIMRA FDMS format, and sends it.
-2. **Data Storage**: Responses from ZIMRA FDMS are stored in Manager.IO's business data. ZatcaEGS not recording any user data.
+1. **One-click fiscalisation**: click **Relay** on an invoice in Manager. ZimraEGS opens the fiscal day if needed, sends the receipt to ZIMRA FDMS, stores the QR code and receipt numbers back on the invoice and returns you to Manager.
+2. **Keeps the device on the server**: the device certificate, private key, receipt counters and every submitted receipt are kept in a database on the ZimraEGS server. Manager only stores a link to the device.
+3. **Closes the fiscal day for you**: open fiscal days are closed automatically every night (23:30 Zimbabwe time by default).
+
+---
+
+## Hosting
+
+ZimraEGS is an ASP.NET Core 8 application that you host yourself.
+
+```bash
+dotnet run --project ZimraEGS
+```
+
+Settings (in `appsettings.json` or as environment variables):
+
+| Setting | Meaning |
+| --- | --- |
+| `DataDirectory` | Folder for the database (`zimraegs.db`) and the encryption keys (`keys/`). It must survive restarts. Default: `$HOME/ZimraEGS-data`. |
+| `AutoCloseDay:Enabled`, `AutoCloseDay:TimeOfDay` | Automatic fiscal day close and its time (Zimbabwe local time, `HH:mm`). |
+| `Fdms:SkipServerCertificateValidation` | Leave `false`. Only for hosts that cannot validate the ZIMRA server certificate. |
+
+**Back up the whole `DataDirectory`.** The database and the `keys` folder belong together: private keys in the database are encrypted with the keys in that folder. If the folder is lost, each device has to be registered with ZIMRA again.
+
+Run one instance only; the receipt chain of a device is serialised inside the process.
 
 ---
 
@@ -28,102 +51,55 @@ This guide aims to assist users in integrating and testing the ZimraEGS applicat
 
 ---
 
-### 2. Creating New Business Data in Manager.IO
-1. Open **Manager.IO**.
-2. Create a new business data entry.
-3. Enable the **Sales Invoice** module.
-4. Create a new invoice and add the relay URL below in the invoice settings:
-   - `https://zimraegs.azurewebsite.net/relay`
-5. Save, then click the **Relay** button on the **Invoice View** page. You will be redirected to the **Register Device** page.
+### 2. Connecting a Manager Business
+1. In **Manager.IO**, enable **Sales Invoices** and create an invoice.
+2. In the invoice form settings, tick **Relay** and enter your server's relay URL, for example `https://your-server/relay`.
+3. Open the invoice and click **Relay**. A business without a device is taken to the **Setup** page.
+4. Click **Update Business Data** to create the custom fields.
+5. Enter the Device ID, Serial Number and Activation Key from ZIMRA, then click **Verify Taxpayer**, **Register Device** and **GetConfig**.
+6. Click **Save and Finish**. The device is now stored on the server and linked to the business.
 
 ---
 
-### 3. Device Registration
-#### A. Update Business Setup
-1. On the **Register Device** page, click the **Update Business Setup** button.
-2. If successful, its created custimfields needed for integration.
-3. Proceed to the next step.
+### 3. Fiscalising Invoices
+1. Set the base currency (Settings - Currencies - Base Currency) to `ZWG` or `USD`.
+2. Create the invoice:
+   - Every line needs a tax code and, for VAT registered taxpayers, an **HS Code** (on the line or on the inventory item).
+   - Tax codes named like `Standard rated 15% — 3 —` carry the ZIMRA tax ID. Other tax codes are matched to the ZIMRA taxes by their rate.
+   - Fill in **Payment Type** and **Payment Amount**; the amounts must add up to the invoice total.
+   - A customer needs both a Registered Name and a TIN, or neither.
+3. Click **Relay**. That is all: the fiscal day is opened automatically, and you return to the invoice with its QR code.
 
-#### B. Fill Registration Form
-1. Complete the form with the data obtained from the ZIMRA Fiscalisation Data Management System.
-2. Click **Verify Taxpayer**. If verification is successful, its will show Tax Payer Information.
-3. Proceed to the next step.
+If something is missing, a page lists what to fix in plain words and nothing is sent.
 
-#### C. Register and Configure
-1. Click the **Register Device** button.
-   - If successful, we get Device Certificate from server.
-   - Continue to the **GetConfig** step.
-2. Click the **GetConfig** button.
-   - If successful, Registration is Done, and Manager ready for comunication with Zimra Server.
-   - Click the **Download** button. All Integration Information will be automatically saved in the business data.
+Clicking **Relay** on an invoice that is already fiscalised shows its receipt and never sends it twice.
 
-The device is now ready for invoice reporting.
+#### Credit and debit notes
+Create a credit note that refers to the fiscalised invoice, enter the reason in **Receipt Notes**, and click **Relay**. A credit note entered with negative prices is sent as a debit note.
 
 ---
 
-### 4. Testing Invoice Reporting
-#### A. Set Base Currenzy
-1. In Manager, goto Setting - Currencies - Base Currency
-2. Set 'ZWG' on Code and Symbol, and Click Save or Update
-
-#### B. Configure Default Form
-1. Remove Previously Invoice
-2. Create a new default form.
-3. Checklist 'Custom Themes' and add 'ZimTheme'
-4. Checklist 'Show TaxAmount Column' option
-5. Checklist 'Relay' option Add the relay URL (`https://zimraegs.azurewebsite.net/relay`) to the default form.
-6. Save the form settings.
-
-#### C. Create a New Invoice
-1. Create a new invoice with the following details:
-   - Date and Reference are disabled, it will automaticaly add when Invoice Reporting.
-   - Add Customers, you can use the default test customer
-   - Add Item, make sure All Item Should Have HSCode and TaxCode.
-   - **Payment Type** and **Payment Amount** (the payment amount must equal the total invoice amount).
-   - Leave other fields blank for now and Click Create.
-2. Click the **Relay** button on the **Invoice View** page. You will be redirected to the **Open Day** page.
-
-#### D. Open a Fiscal Day
-1. On the **Open Day** page, click the **Open Fiscal Day** button.
-2. Check the results and ensure the **FiscalDay** status is successful (FiscalDayStatusOpened).
-3. Back to Manager Invoice view page.
-
-#### E. Submit the Invoice
-1. Resend the invoice via the **Relay** button.
-2. Ensure the invoice format matches ZIMRA FDMS specifications.
-3. Click the **Submit Invoice** button.
-   - If successful with no errors in server response, a QRCode will be displayed on the **Invoice View** page.
-4. Make and submit some Invoice for testing.
-
----
-
-### 5. Closing the Fiscal Day
-#### Close the Fiscal Day:
-1. Resend an invoice with the **APPROVED** status.
-2. The **Close Day** button will appear.
-3. Click the **Close Day** button.
-   - If successful, the Fiscal Day status will update to **FiscalDayClosed**.
+### 4. Fiscal Days
+- A fiscal day is opened by the first invoice relayed after the previous day was closed.
+- Days are closed automatically every night, and in any case before ZIMRA's maximum day length.
+- To close earlier, relay any fiscalised invoice and click **Close fiscal day**.
 
 ---
 
 ## Key Points to Understand
-#### Data Handling:
-1. **Invoice Date**: Adjusted to the date when the receipt is first submitted to the server.
-2. **Invoice Number**: Automatically generated using the Fiscal Day number and Invoice Counter.
-3. **Customer Data**: Should be Complete.
-4. **Inventory Item**: Should have TaxCode and HSCode
-5. **Payment Amount**: Should Equal with Invoice Total Amount.
-
-#### Error Handling:
-1. If submission fails, fix the data and resend it.
-2. New invoices cannot be sent until failed invoices are resolved.
-3. If corrections fail, manually close the Fiscal Day via the ZIMRA FDMS Test Environment website.
-4. After manual closure, open a new Fiscal Day for new invoices.
-5. Due to limited developer support, users must deeply understand the error-handling process.
+1. **Invoice Date and Number** are set at fiscalisation: the date is the submission time, the number is `FiscalDay-ReceiptCounter`.
+2. **Lost connection**: if ZIMRA does not answer, the signed receipt is kept and sent again, unchanged, on the next relay. The chain cannot go out of step.
+3. **Receipts ZIMRA flags** (red or grey validation errors) are recorded by ZIMRA and stay part of the fiscal day. Correct them with a credit note. Such a day may have to be closed in the ZIMRA portal.
+4. **Upgrading from a version that kept the certificate in Manager**: just relay an invoice. The device and its open fiscal day are imported, and the certificate and key are removed from Manager's business data.
 
 ---
 
-#### Feedback:
-....
+## Development
+
+```bash
+dotnet test
+```
+
+The tests run the whole flow against a stand-in FDMS that re-checks signatures, numbering and day totals.
 
 Thanks.

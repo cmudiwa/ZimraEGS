@@ -1,9 +1,10 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
-using System.IO.Compression;
 using System.Net;
 using ZimraEGS.ApiClient.Helpers;
 using ZimraEGS.ApiClient.Models;
+using ZimraEGS.Data;
+using ZimraEGS.Services;
 using ZimraEGS.Helpers;
 using ZimraEGS.Models;
 
@@ -14,10 +15,18 @@ namespace ZimraEGS.Controllers
     {
 
         private readonly ILogger<SetupController> _logger;
+        private readonly DeviceStore _store;
+        private readonly FiscalDbContext _db;
+        private readonly FiscalService _fiscal;
+        private readonly IFdmsClientFactory _clientFactory;
 
-        public SetupController(ILogger<SetupController> logger)
+        public SetupController(ILogger<SetupController> logger, DeviceStore store, FiscalDbContext db, FiscalService fiscal, IFdmsClientFactory clientFactory)
         {
             _logger = logger;
+            _store = store;
+            _db = db;
+            _fiscal = fiscal;
+            _clientFactory = clientFactory;
         }
 
         [HttpPost("Update")]
@@ -118,7 +127,7 @@ namespace ZimraEGS.Controllers
                 };
 
                 PlatformType integrationType = (PlatformType)Enum.Parse(typeof(PlatformType), verifyTaxPayerDto.IntegrationType);
-                ApiHelper apiHelper = new ApiHelper(integrationType);
+                using ApiHelper apiHelper = _clientFactory.CreatePublicClient(integrationType);
                 ServerResponse serverResponse = await apiHelper.VerifyTaxpayerInformationAsync(
                     verifyTaxPayerDto.DeviceID,
                     verifyTaxpayerInformationRequest
@@ -166,21 +175,40 @@ namespace ZimraEGS.Controllers
 
                 PlatformType integrationType = (PlatformType)Enum.Parse(typeof(PlatformType), deviceRegistration.IntegrationType);
 
-                ApiHelper apiHelper = new ApiHelper(PlatformType.Simulation);
+                using ApiHelper apiHelper = _clientFactory.CreatePublicClient(integrationType);
                 ServerResponse serverResponse = await apiHelper.RegisterDeviceAsync(deviceRegistration.DeviceID, deviceRegistration.DeviceModelName, deviceRegistration.DeviceModelVersion, registerDeviceRequest);
 
                 if (serverResponse.StatusCode == HttpStatusCode.OK)
                 {
-                    var deviceCertificate = serverResponse.GetContentAs<RegisterDeviceResponse>().Certificate;
+                    var deviceCertificate = Utilities.CleanBase64String(serverResponse.GetContentAs<RegisterDeviceResponse>().Certificate);
+                    string cleanKey = Utilities.CleanBase64String(privateKey);
+                    string pfx = Utilities.GeneratePfx(cleanKey, deviceCertificate, (string)null);
 
-                    string pfxbyte = Utilities.GeneratePfx(Utilities.CleanBase64String(privateKey), Utilities.CleanBase64String(deviceCertificate), (string)null);
+                    // The private key stays on the server. The browser only receives a link to the device.
+                    var device = await _store.FindAsync(integrationType, deviceRegistration.DeviceID);
+                    if (device == null)
+                    {
+                        device = new Device { DeviceID = deviceRegistration.DeviceID, Environment = integrationType };
+                        _db.Devices.Add(device);
+                    }
+
+                    device.SerialNumber = deviceRegistration.DeviceSerialNumber ?? string.Empty;
+                    device.ModelName = deviceRegistration.DeviceModelName;
+                    device.ModelVersion = deviceRegistration.DeviceModelVersion;
+                    device.ProtectedPrivateKey = _store.Protect(cleanKey);
+                    device.ProtectedPfx = _store.Protect(pfx);
+                    device.DeviceCertificate = deviceCertificate;
+                    device.GeneratedCsr = Utilities.CleanBase64String(generatedCsr);
+                    device.IsActive = false;
+                    await _db.SaveChangesAsync();
+
+                    string deviceLink = await _store.IssueLinkAsync(device);
 
                     var response = new
                     {
-                        GeneratedCsr = Utilities.CleanBase64String(generatedCsr),
-                        PrivateKey = Utilities.CleanBase64String(privateKey),
-                        DeviceCertificate = Utilities.CleanBase64String(deviceCertificate),
-                        Base64Pfx = pfxbyte
+                        GeneratedCsr = device.GeneratedCsr,
+                        DeviceCertificate = deviceCertificate,
+                        DeviceLink = deviceLink
                     };
 
                     return Ok(response);
@@ -207,24 +235,28 @@ namespace ZimraEGS.Controllers
                 return BadRequest(new { Errors = errors });
             }
 
-            if (getConfigDTO == null || string.IsNullOrEmpty(getConfigDTO.Base64Pfx))
+            var device = await _store.FindByLinkAsync(getConfigDTO?.DeviceLink, requireActive: false);
+            if (device == null)
             {
-                return BadRequest(new { Errors = "Base64 PFX is required." });
+                return BadRequest(new { Errors = "The device is not registered on this server yet. Register the device first." });
             }
 
             try
             {
                 string errMessage = string.Empty;
 
-                PlatformType integrationType = (PlatformType)Enum.Parse(typeof(PlatformType), getConfigDTO.IntegrationType);
+                using var client = _clientFactory.CreateDeviceClient(device.Environment, device.DeviceID, device.ModelName, device.ModelVersion, _store.Unprotect(device.ProtectedPfx));
 
-                ApiHelper apiHelper = new ApiHelper(getConfigDTO.Base64Pfx, PlatformType.Simulation);
-
-                ServerResponse serverResponse = await apiHelper.GetConfigAsync(getConfigDTO.DeviceID, getConfigDTO.DeviceModelName, getConfigDTO.DeviceModelVersion);
+                ServerResponse serverResponse = await client.GetConfigAsync();
 
                 if (serverResponse.StatusCode == HttpStatusCode.OK)
                 {
                     GetConfigResponse getConfigResponse = serverResponse.GetContentAs<GetConfigResponse>();
+
+                    device.ConfigJson = JsonConvert.SerializeObject(getConfigResponse);
+                    device.ConfigFetchedUtc = DateTime.UtcNow;
+                    device.CertificateValidTillUtc = getConfigResponse.CertificateValidTill.UtcDateTime;
+                    await _db.SaveChangesAsync();
 
                     var response = new
                     {
@@ -255,68 +287,43 @@ namespace ZimraEGS.Controllers
 
 
         [HttpPost("setup/savecertificate")]
-        public IActionResult SaveCertificate(SetupViewModel viewModel)
+        public async Task<IActionResult> SaveCertificate(SetupViewModel viewModel)
         {
-            try
+            var device = await _store.FindByLinkAsync(viewModel.DeviceLink, requireActive: false);
+            if (device == null)
             {
-                CertificateInfo certificateInfo = viewModel.CertificateInfo;
-
-                var base64CertificateInfo = ObjectCompressor.SerializeToBase64String(certificateInfo);
-
-                var businessDetails = viewModel.BusinessDetails;
-                if (string.IsNullOrEmpty(viewModel.BusinessDetails))
-                {
-                    businessDetails = @"
-                    {
-                        ""Name"": """",
-                        ""Address"": """",
-                        ""CustomFields2"": {
-                            ""Decimals"": {
-                            },
-                            ""Strings"": {
-                                ""f7214db4-6726-4aa9-b5cd-3ff90ce9ba6c"": """",
-                                ""0f0bf167-4b63-493d-ab45-049a76a07f46"": """",
-                                ""6a347c55-735a-4a38-8cf6-0db93dce2ded"": """",
-                                ""329de867-9cf1-4dfe-8b06-5084bce788c8"": """"
-                            }
-                        },
-                    }";
-                }
-
-                businessDetails = RelayDataHelper.UpdateOrCreateField(businessDetails, "Name", certificateInfo.TaxPayerName);
-                businessDetails = RelayDataHelper.UpdateOrCreateField(businessDetails, "Address", certificateInfo.ToBusinessAddress());
-                businessDetails = RelayDataHelper.ModifyStringCustomFields2(businessDetails, ManagerCustomField.CertificateInfoGuid, base64CertificateInfo);
-                businessDetails = RelayDataHelper.ModifyStringCustomFields2(businessDetails, ManagerCustomField.AppVersionGuid, VersionHelper.GetVersion());
-
-                viewModel.BusinessDetails = businessDetails;
-
-                viewModel.BusinessDetailsJson = JsonConvert.SerializeObject(businessDetails);
-
-                using (var memoryStream = new MemoryStream())
-                {
-                    using (var archive = new ZipArchive(memoryStream, ZipArchiveMode.Create, true))
-                    {
-                        var infoEntry = archive.CreateEntry($"{certificateInfo.VatNumber}_{certificateInfo.DeviceID.ToString().PadLeft(10, '0')}_{certificateInfo.IntegrationType.ToString()}.json");
-
-                        using (var writer = new StreamWriter(infoEntry.Open()))
-                        {
-                            var infoJson = JsonConvert.SerializeObject(certificateInfo, Newtonsoft.Json.Formatting.Indented);
-                            writer.Write(infoJson);
-                        }
-                    }
-
-                    memoryStream.Position = 0;
-
-                    var fileContent = memoryStream.ToArray();
-                    viewModel.FileContent = Convert.ToBase64String(fileContent);
-                    viewModel.Filename = $"{certificateInfo.VatNumber}_{certificateInfo.DeviceID.ToString().PadLeft(10, '0')}_{certificateInfo.IntegrationType.ToString()}.zip";
-                    viewModel.IsFileReady = true;
-                }
+                return BadRequest("The device is not registered on this server. Start the registration again from Manager.");
             }
-            catch
-            {
-                throw;
-            }
+
+            CertificateInfo certificateInfo = viewModel.CertificateInfo;
+
+            // Key material never comes from the browser; whatever was posted in these fields is ignored.
+            certificateInfo.PrivateKey = string.Empty;
+            certificateInfo.Base64Pfx = string.Empty;
+            certificateInfo.DeviceCertificate = string.Empty;
+            certificateInfo.GeneratedCSR = string.Empty;
+            certificateInfo.DeviceID = device.DeviceID;
+            certificateInfo.IntegrationType = device.Environment;
+
+            _store.ApplyCertificateInfo(device, certificateInfo);
+            device.IsActive = true;
+            await _db.SaveChangesAsync();
+
+            _logger.LogInformation("Device {DeviceID} ({Environment}) registered", device.DeviceID, device.Environment);
+
+            // Start from the business details Manager relayed, so nothing the user entered there is lost.
+            string businessDetails = string.IsNullOrWhiteSpace(viewModel.BusinessDetailsJson) ? "{}" : viewModel.BusinessDetailsJson;
+            businessDetails = RelayDataHelper.UpdateOrCreateField(businessDetails, "Name", certificateInfo.TaxPayerName ?? string.Empty);
+            businessDetails = RelayDataHelper.UpdateOrCreateField(businessDetails, "Address", certificateInfo.ToBusinessAddress());
+
+            var call = ManagerWriteBack.BusinessLink(viewModel.Api ?? string.Empty, businessDetails, viewModel.DeviceLink);
+
+            viewModel.BusinessDetails = call.Payload;
+            viewModel.BusinessDetailsJson = call.Payload;
+            viewModel.CertificateInfo = DeviceStore.WithoutSecrets(certificateInfo);
+            viewModel.CertificateInfo.DeviceCertificate = device.DeviceCertificate;
+            viewModel.IsFileReady = true;
+
             return View("index", viewModel);
         }
     }

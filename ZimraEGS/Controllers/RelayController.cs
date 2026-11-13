@@ -1,345 +1,144 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
-using ZimraEGS.ApiClient.Enums;
-using ZimraEGS.ApiClient.Helpers;
 using ZimraEGS.ApiClient.Models;
-using ZimraEGS.Helpers;
+using ZimraEGS.Data;
 using ZimraEGS.Models;
+using ZimraEGS.Services;
 
 namespace ZimraEGS.Controllers
 {
     public class RelayController : Controller
     {
-
+        private readonly DeviceStore _store;
+        private readonly FiscalService _fiscal;
         private readonly ILogger<RelayController> _logger;
 
-        public RelayController(ILogger<RelayController> logger)
+        public RelayController(DeviceStore store, FiscalService fiscal, ILogger<RelayController> logger)
         {
+            _store = store;
+            _fiscal = fiscal;
             _logger = logger;
         }
 
+        /// <summary>
+        /// Entry point of Manager's Relay button. One click fiscalises the invoice: the fiscal day is opened
+        /// when needed, the receipt is sent to ZIMRA, and the result page stores the outcome back in Manager.
+        /// </summary>
         [HttpPost("relay")]
         public async Task<IActionResult> ProcessFormData([FromForm] Dictionary<string, string> formData)
         {
+            string referrer = formData.GetValueOrDefault("Referrer") ?? string.Empty;
+
             try
             {
-                var relayData = new RelayData(formData);
+                var relay = new RelayData(formData);
 
-                if (relayData.CertificateInfo == null)
+                var device = await _store.ResolveAsync(relay);
+                if (device == null)
                 {
-                    SetupViewModel setupViewModel = new SetupViewModel
+                    if (DeviceLink.IsLink(relay.DeviceLinkRaw))
                     {
-                        Referrer = relayData.Referrer,
-                        Api = relayData.Api,
-                        Token = relayData.Token,
-                        BusinessDetailsJson = relayData.BusinessDetailJson
-                    };
+                        return ShowProblem(referrer, "This business is linked to a device this server does not know",
+                            "The device link stored in Manager does not match any device registered on this server. Check that the Relay URL points to the server the device was registered on.");
+                    }
 
-                    TempData["SetupViewModel"] = JsonConvert.SerializeObject(setupViewModel);
-
+                    // No device yet: start registration.
+                    TempData["SetupViewModel"] = JsonConvert.SerializeObject(new SetupViewModel
+                    {
+                        Referrer = relay.Referrer,
+                        Api = relay.Api,
+                        Token = relay.Token,
+                        BusinessDetailsJson = relay.BusinessDetailJson
+                    });
                     return RedirectToAction("Register", "Setup");
                 }
 
-                _logger.LogInformation("{0} - {1} - {2}", relayData.Api, HttpContext.Connection.RemoteIpAddress?.ToString() ?? "Unknown",relayData.CertificateInfo.IntegrationType);
+                _logger.LogInformation("Relay for device {DeviceID} ({Environment}) invoice {FormKey}", device.DeviceID, device.Environment, relay.FormKey);
 
-                //if (relayData.EGSVersion <= 2410190001)
-                //{
+                // The private key is still in Manager: hand out a link so the result page can replace it.
+                string deviceLink = DeviceLink.IsLink(relay.DeviceLinkRaw) ? relay.DeviceLinkRaw : await _store.IssueLinkAsync(device);
+                bool replaceLegacyBlob = !DeviceLink.IsLink(relay.DeviceLinkRaw);
 
-                //    var businessDetails = relayData.BusinessDetailJson;
-                //    businessDetails = RelayDataHelper.ModifyStringCustomFields2(businessDetails, ManagerCustomField.AppVersionGuid, VersionHelper.GetVersion());
-
-                //    var svm = new SetupViewModel
-                //    {
-                //        Referrer = relayData.Referrer,
-                //        BusinessDetailsJson = businessDetails,
-                //        Api = relayData.Api,
-                //        Token = relayData.Token,
-                //    };
-
-                //    TempData["SetupViewModel"] = JsonConvert.SerializeObject(svm);
-                //    return RedirectToAction("UpdateBusinessData", "Setup");
-                //}
-
-                if (relayData.BusinessReference.LastApprovalStatus == "REJECTED")
+                var model = new ReceiptResultViewModel
                 {
-                    if (relayData.FormKey != relayData.BusinessReference.ReceiptUUID)
-                    {
-                        ErrorViewModel errorViewModel = new ErrorViewModel
-                        {
-                            Referrer = relayData.Referrer,
-                            ErrorMessage = "Last Invoice was Rejected, Cannot Reporting New Receipt"
-                        };
-                        return View("Error", errorViewModel);
-                    }
+                    Referrer = relay.Referrer,
+                    Token = relay.Token,
+                    DeviceLink = deviceLink,
+                };
+
+                if (replaceLegacyBlob)
+                {
+                    model.ManagerCalls.Add(ManagerWriteBack.BusinessLink(relay.Api, relay.BusinessDetailJson, deviceLink));
                 }
 
-                var deviceID = relayData.CertificateInfo.DeviceID;
-                var deviceModelName = relayData.CertificateInfo.DeviceModelName;
-                var deviceModelVersion = relayData.CertificateInfo.DeviceModelVersion;
-
-                ApiHelper apiHelper = new ApiHelper(relayData.CertificateInfo.Base64Pfx, relayData.CertificateInfo.IntegrationType);
-
-                ServerResponse statusresponse = await apiHelper.SendGetRequestAsync(
-                    "GetStatus",
-                    deviceID,
-                    deviceModelName,
-                    deviceModelVersion
-                );
-
-                if (statusresponse.StatusCode == System.Net.HttpStatusCode.OK)
+                // Fiscalised by the previous version, before receipts were kept on this server.
+                if (!string.IsNullOrEmpty(relay.ApprovalStatus) && await _fiscal.FindRecordedReceiptAsync(device.Id, relay.FormKey) == null)
                 {
-                    relayData.DeviceStatus = statusresponse.GetContentAs<GetStatusResponse>();
-
-                    if (relayData.DeviceStatus.FiscalDayStatus == FiscalDayStatus.FiscalDayClosed)
-                    {
-                        // Check Certificate Valid
-                        TimeSpan dateDifference = relayData.CertificateInfo.CertificateValidTill - TimeZoneHelper.GetSouthAfricaTime();
-                        if (dateDifference.TotalDays < 30)
-                        {
-                            CertInfoViewModel certIfoVew = new CertInfoViewModel
-                            {
-                                BusinessDetailJson = relayData.BusinessDetailJson,
-                                Api = relayData.Api,
-                                Token = relayData.Token,
-                                Referrer = relayData.Referrer,
-                                CertificateInfo = relayData.CertificateInfo,
-                            };
-
-                            TempData["CertIfoVewModel"] = JsonConvert.SerializeObject(certIfoVew);
-                            return RedirectToAction("IssueCertificate", "FiscalDevice");
-                        }
-
-                        OpenDayViewModel openDayViewModel = relayData.GetOpenDayViewModel();
-                        TempData["OpenDayViewModel"] = JsonConvert.SerializeObject(openDayViewModel);
-                        return RedirectToAction("OpenDay", "FiscalDevice");
-                    }
-                    else
-                    {
-                        // Check if invoice has been approved
-                        if (relayData.ApprovalStatus == "APPROVED")
-                        {
-                            ApprovedInvoiceViewModel approvedInvoiceViewModel = relayData.GetApprovedInvoiceViewModel();
-                            return View("ApprovedInvoice", approvedInvoiceViewModel);
-                        }
-                        else if (string.IsNullOrEmpty(relayData.ApprovalStatus) && relayData.BusinessReference.LastApprovalStatus == "REJECTED")
-                        {
-                            return RedirectToAction("Error", "Home");
-                        }
-                    }
-                }
-                else
-                {
-                    return StatusCode((int)statusresponse.StatusCode, new { Error = statusresponse.GetFullResponseAsJson() });
+                    model.Status = relay.ApprovalStatus;
+                    model.AlreadyFiscalised = true;
+                    model.InvoiceNo = relay.ManagerInvoice?.Reference ?? string.Empty;
+                    model.QrCode = relay.ReceiptQrCode ?? string.Empty;
+                    model.VerificationCode = relay.VerificationCode ?? string.Empty;
+                    model.ValidationErrors = relay.ReceiptReference?.SubmitReceiptResponse?.ValidationErrors?.ToList() ?? [];
+                    FillDay(model, device);
+                    return View("Result", model);
                 }
 
-                ServerResponse configresponse = await apiHelper.SendGetRequestAsync(
-                    "GetConfig",
-                    deviceID,
-                    deviceModelName,
-                    deviceModelVersion
-                );
-
-                if (Response.StatusCode == 200)
+                var result = await _fiscal.FiscaliseAsync(device.Id, relay);
+                if (!result.Success)
                 {
-                    relayData.DeviceConfig = configresponse.GetContentAs<GetConfigResponse>();
-                }
-                else
-                {
-                    return StatusCode((int)configresponse.StatusCode, new { Error = configresponse.GetFullResponseAsJson() });
+                    return ShowProblem(referrer, result.ProblemTitle ?? "The invoice could not be sent to ZIMRA", [.. result.Problems]);
                 }
 
-                ReceiptHelper rh = new ReceiptHelper(relayData);
-                relayData.Receipt = rh.GenerateZimraReceipt();
+                var row = result.Receipt!;
+                model.Status = row.Status;
+                model.AlreadyFiscalised = result.AlreadyFiscalised;
+                model.InvoiceNo = row.InvoiceNo;
+                model.ReceiptType = row.ReceiptType.ToString();
+                model.ReceiptDate = row.ReceiptDate.Replace('T', ' ');
+                model.Currency = row.Currency;
+                model.Total = row.Total;
+                model.FiscalDayNo = row.FiscalDayNo;
+                model.ReceiptGlobalNo = row.ReceiptGlobalNo;
+                model.QrCode = row.QrCode;
+                model.VerificationCode = row.VerificationCode;
+                model.ValidationErrors = ParseValidationErrors(row);
+                model.ManagerCalls.Add(ManagerWriteBack.Invoice(relay, device, row));
+                model.AutoReturn = !result.AlreadyFiscalised && row.Status == ReceiptStatus.Approved && model.ValidationErrors.Count == 0;
+                FillDay(model, device);
 
-                if (relayData.BusinessReference.LastApprovalStatus == "REJECTED")
-                {
-                    if (Convert.ToBase64String(relayData.Receipt.ReceiptDeviceSignature.Hash) != relayData.BusinessReference.LastReceiptHash)
-                    {
-                        ErrorViewModel errorViewModel = new ErrorViewModel
-                        {
-                            Referrer = relayData.Referrer,
-                            ErrorMessage = "InvoiceHash does not Match Last Rejected Invoice"
-                        };
-                        return View("Error", errorViewModel);
-                    }
-                }
-
-                RelayDataViewModel viewModel = relayData.GetRelayDataViewModel();
-
-                return View(viewModel);
-
+                return View("Result", model);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Kesalahan saat memproses relay data");
-                return StatusCode(500, new { Error = $"ProcessFormData > Internal server error: {ex.Message}" });
+                _logger.LogError(ex, "Relay failed");
+                return ShowProblem(referrer, "Something went wrong", ex.Message);
             }
         }
 
-        public async Task<IActionResult> AjaxSubmitReceipt([FromForm] RelayDataViewModel model)
+        private static void FillDay(ReceiptResultViewModel model, Device device)
         {
+            model.FiscalDayStatus = device.FiscalDayStatus.ToString();
+            model.LastCloseDayError = device.LastCloseDayError;
+            if (model.FiscalDayNo == 0) model.FiscalDayNo = device.FiscalDayNo;
+        }
+
+        private static List<ValidationError> ParseValidationErrors(FiscalReceipt row)
+        {
+            if (string.IsNullOrEmpty(row.ResponseJson)) return [];
             try
             {
-                var deviceID = model.DeviceID;
-                var deviceModelName = model.DeviceModelName;
-                var deviceModelVersion = model.DeviceModelVersion;
-
-                string ApprovalStatus = string.Empty;
-
-                var payload = new SubmitReceiptRequest
-                {
-                    Receipt = JsonConvert.DeserializeObject<Receipt>(model.ReceiptJson)
-                };
-
-                ApiHelper apiHelper = new ApiHelper(model.Base64Pfx, model.IntegrationType);
-
-                // Deserialize receipt JSON and make the API call
-                ServerResponse response = await apiHelper.SendPostRequestAsync<SubmitReceiptRequest>(
-                    "SubmitReceipt",
-                    deviceID,
-                    deviceModelName,
-                    deviceModelVersion,
-                    payload
-                );
-
-                //GetStatusResponse getStatusResponse;
-
-                if (response.StatusCode == System.Net.HttpStatusCode.OK)
-                {
-                    SubmitReceiptResponse submitReceiptResponse = response.GetContentAs<SubmitReceiptResponse>();
-
-                    ApprovalStatus = "APPROVED";
-
-                    if (submitReceiptResponse.ValidationErrors != null)
-                    {
-                        var hasCriticalErrors = submitReceiptResponse.ValidationErrors.Any(error =>
-                                    error.ValidationErrorColor.Equals("Grey", StringComparison.OrdinalIgnoreCase) ||
-                                    error.ValidationErrorColor.Equals("Red", StringComparison.OrdinalIgnoreCase)
-                                );
-
-                        if (hasCriticalErrors)
-                        {
-                            ApprovalStatus = "REJECTED";
-                        }
-                    }
-
-                    // Process Invoice JSON
-                    var invoiceJson = model.InvoiceJson;
-
-                    invoiceJson = RelayDataHelper.ModifyStringCustomFields2(invoiceJson, ManagerCustomField.ApprovalStatusGuid, ApprovalStatus);
-
-                    invoiceJson = RelayDataHelper.UpdateOrCreateField(invoiceJson, model.ReceiptType == ReceiptType.FiscalInvoice ? "IssueDate" : "Date", model.ReceiptDate.ToString("yyyy-MM-dd"));
-                    invoiceJson = RelayDataHelper.ModifyStringCustomFields2(invoiceJson, ManagerCustomField.ReceiptDateGuid, model.ReceiptDate.ToString("yyyy-MM-dd HH:mm:ss"));
-
-                    invoiceJson = RelayDataHelper.UpdateOrCreateField(invoiceJson, "Reference", model.InvoiceNumber);
-
-                    InvoiceReference invoiceReference = new InvoiceReference();
-                    invoiceReference.ApprovalStatus = ApprovalStatus;
-                    invoiceReference.ReceiptHash = model.ReceiptHash;
-                    invoiceReference.ReceiptSignature = model.ReceiptSignature;
-                    invoiceReference.SubmitReceiptResponse = submitReceiptResponse;
-
-                    model.InvoiceReferenceJson = JsonConvert.SerializeObject(invoiceReference, Formatting.Indented);
-
-                    invoiceJson = RelayDataHelper.ModifyStringCustomFields2(invoiceJson, ManagerCustomField.ServerResponseGuid, model.InvoiceReferenceJson);
-
-                    invoiceJson = RelayDataHelper.ModifyStringCustomFields2(invoiceJson, ManagerCustomField.ReceiptQRCodeGuid, model.ReceiptQrCode);
-
-                    if (!string.IsNullOrEmpty(ApprovalStatus))
-                    {
-                        invoiceJson = RelayDataHelper.ModifyStringCustomFields2(invoiceJson, ManagerCustomField.VerificationCodeGuid, model.TmpReceiptVerificationCode);
-                    }
-
-                    invoiceJson = RelayDataHelper.ModifyStringCustomFields2(invoiceJson, ManagerCustomField.DeviceSNGuid, model.DeviceSN);
-                    invoiceJson = RelayDataHelper.ModifyDecimalCustomFields2(invoiceJson, ManagerCustomField.DeviceIDGuid, model.DeviceID);
-                    invoiceJson = RelayDataHelper.ModifyDecimalCustomFields2(invoiceJson, ManagerCustomField.FiscalDayNoGuid, model.FiscalDayNo);
-                    invoiceJson = RelayDataHelper.ModifyDecimalCustomFields2(invoiceJson, ManagerCustomField.ReceiptGlobalNoGuid, model.ReceiptGlobalNo);
-                    invoiceJson = RelayDataHelper.ModifyDecimalCustomFields2(invoiceJson, ManagerCustomField.ReceiptCounterGuid, model.ReceiptCounter);
-
-                    if (model.ReceiptType != ReceiptType.FiscalInvoice)
-                    {
-                        invoiceJson = RelayDataHelper.ModifyDecimalCustomFields2(invoiceJson, ManagerCustomField.DeviceIDRefGuid, model.DeviceIDRef);
-                        invoiceJson = RelayDataHelper.ModifyStringCustomFields2(invoiceJson, ManagerCustomField.DeviceSNRefGuid, model.DeviceSNRef);
-                        invoiceJson = RelayDataHelper.ModifyDecimalCustomFields2(invoiceJson, ManagerCustomField.FiscalDayNoRefGuid, model.FiscalDayNoRef);
-                        invoiceJson = RelayDataHelper.ModifyDecimalCustomFields2(invoiceJson, ManagerCustomField.ReceiptGlobalNoRefGuid, model.ReceiptGlobalNoRef);
-                        invoiceJson = RelayDataHelper.ModifyDecimalCustomFields2(invoiceJson, ManagerCustomField.ReceiptCounterRefGuid, model.ReceiptCounterRef);
-
-                        invoiceJson = RelayDataHelper.ModifyStringCustomFields2(invoiceJson, ManagerCustomField.ReceiptNoRefGuid, model.ReceiptRefNo);
-                        invoiceJson = RelayDataHelper.ModifyStringCustomFields2(invoiceJson, ManagerCustomField.ReceiptRefDateGuid, model.ReceiptRefDate.ToString("yyyy-MM-dd HH:mm:ss"));
-                    }
-
-                    // Process Business Details JSON
-
-                    var businessJson = model.BusinessDetailJson;
-
-                    BusinessReference businessreference = new BusinessReference();
-                    if (!string.IsNullOrEmpty(model.BusinessReferenceJson))
-                    {
-                        businessreference = JsonConvert.DeserializeObject<BusinessReference>(model.BusinessReferenceJson);
-                        if (businessreference == null) { businessreference = new BusinessReference(); }
-                    }
-
-                    businessreference.LastApprovalStatus = ApprovalStatus;
-                    businessreference.LastReceiptCounter = model.ReceiptCounter;
-
-                    if (ApprovalStatus == "APPROVED")
-                    {
-                        businessreference.LastReceiptGlobalNo = model.ReceiptGlobalNo;
-                        businessreference.LastReceiptHash = model.ReceiptHash;
-                        businessreference.ReceiptUUID = model.FormKey;
-
-                        businessJson = RelayDataHelper.ModifyStringCustomFields2(businessJson, ManagerCustomField.BusinessReferenceGuid, JsonConvert.SerializeObject(businessreference, Formatting.Indented));
-
-                        if (!string.IsNullOrEmpty(model.ReceiptJson))
-                        {
-                            var receipt = JsonConvert.DeserializeObject<Receipt>(model.ReceiptJson);
-
-                            var newFiscalDaySummary = FiscalDayProcessor.GenerateFiscalDaySummary(receipt, model.FiscalDayNo);
-
-                            if (!string.IsNullOrEmpty(model.FiscalDaySummaryJson?.Trim()) && model.FiscalDaySummaryJson.Trim() != "null")
-                            {
-                                var lastFiscalDaySummary = JsonConvert.DeserializeObject<FiscalDaySummary>(model.FiscalDaySummaryJson);
-                                newFiscalDaySummary = FiscalDayProcessor.CombineFiscalDaySummaries(lastFiscalDaySummary, newFiscalDaySummary);
-                            }
-
-                            string fiscalDaySummaryJson = JsonConvert.SerializeObject(newFiscalDaySummary, Formatting.Indented);
-
-                            // Modify the business JSON with the new fiscal day summary.
-                            businessJson = RelayDataHelper.ModifyStringCustomFields2(businessJson, ManagerCustomField.FiscalDaySummaryGuid, fiscalDaySummaryJson);
-                        }
-                    }
-
-                    // Create combined object
-                    var combinedApiObject = new
-                    {
-                        ApiInvoice = new
-                        {
-                            ApiUrl = Utils.ConstructInvoiceApiUrl(model.Referrer, model.FormKey),
-                            SecretKey = model.Token,
-                            Payload = invoiceJson
-                        },
-                        ApiReference = new
-                        {
-                            ApiUrl = $"{model.Api}/business-details-form/38cf4712-6e95-4ce1-b53a-bff03edad273",
-                            SecretKey = model.Token,
-                            Payload = businessJson
-                        },
-                        SubmitReceiptResponse = submitReceiptResponse,
-                        //GetStatusResponse = getStatusResponse
-                    };
-
-                    // Serialize combined object to JSON
-                    string combinedJson = JsonConvert.SerializeObject(combinedApiObject, Formatting.Indented);
-
-                    return Ok(combinedJson);
-                }
-
-                return StatusCode((int)response.StatusCode, response.GetContentAsString());
+                return JsonConvert.DeserializeObject<SubmitReceiptResponse>(row.ResponseJson)?.ValidationErrors?.ToList() ?? [];
             }
-            catch (Exception ex)
+            catch (JsonException)
             {
-                return StatusCode(500, Json(new { Error = ex.Message }));
+                return [];
             }
+        }
+
+        private ViewResult ShowProblem(string referrer, string title, params string[] problems)
+        {
+            return View("Problem", new ProblemViewModel { Referrer = referrer, Title = title, Problems = [.. problems] });
         }
     }
 }

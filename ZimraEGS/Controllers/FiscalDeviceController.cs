@@ -1,338 +1,44 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Newtonsoft.Json;
-using System.Security.Cryptography;
-using System.Text;
-using ZimraEGS.ApiClient.Helpers;
-using ZimraEGS.ApiClient.Models;
-using ZimraEGS.Helpers;
+using Microsoft.AspNetCore.Mvc;
 using ZimraEGS.Models;
+using ZimraEGS.Services;
 
 namespace ZimraEGS.Controllers
 {
     public class FiscalDeviceController : Controller
     {
-        public IActionResult Index()
+        private readonly DeviceStore _store;
+        private readonly FiscalService _fiscal;
+
+        public FiscalDeviceController(DeviceStore store, FiscalService fiscal)
         {
-            var model = new RelayData();
-            return View(model);
+            _store = store;
+            _fiscal = fiscal;
         }
 
-        public IActionResult IssueCerificate()
-        {
-            if (TempData["CertInfoViewModel"] != null)
-            {
-                string certInfoJson = TempData["CertInfoViewModel"].ToString();
-                CertInfoViewModel model = JsonConvert.DeserializeObject<CertInfoViewModel>(certInfoJson);
-                return View(model);
-            }
-            return RedirectToAction("Error", "Home");
-        }
-
-        public IActionResult OpenDay()
-        {
-            if (TempData["OpenDayViewModel"] != null)
-            {
-                string openDayViewModel = TempData["OpenDayViewModel"].ToString();
-
-                OpenDayViewModel model = JsonConvert.DeserializeObject<OpenDayViewModel>(openDayViewModel);
-
-                return View(model);
-            }
-
-            return RedirectToAction("Error", "Home");
-        }
-
+        /// <summary>Closes the open fiscal day on request. Days are also closed automatically every night.</summary>
         [HttpPost]
-        public IActionResult CloseDay(CloseDayViewModel model)
+        public async Task<IActionResult> CloseDay([FromForm] string deviceLink, [FromForm] string? referrer)
         {
-            return View(model);
-        }
-
-        [HttpPost]
-        public async Task<IActionResult> AjaxOpenDay([FromForm] OpenDayViewModel model)
-        {
-            try
+            var device = await _store.FindByLinkAsync(deviceLink);
+            if (device == null)
             {
-                var deviceID = model.DeviceID;
-                var deviceModelName = model.DeviceModelName;
-                var deviceModelVersion = model.DeviceModelVersion;
-
-                OpenDayRequest openDayRequest = new OpenDayRequest()
+                return View("Problem", new ProblemViewModel
                 {
-                    FiscalDayNo = model.LastFiscalDayNo + 1,
-                    FiscalDayOpened = TimeZoneHelper.GetSouthAfricaTime()
-                };
-
-                ApiHelper apiHelper = new ApiHelper(model.Base64Pfx, model.IntegrationType);
-                ServerResponse openDayResponse = await apiHelper.SendPostRequestAsync<OpenDayRequest>(
-                    "OpenDay",
-                    deviceID,
-                    deviceModelName,
-                    deviceModelVersion,
-                    openDayRequest
-                );
-
-                if (openDayResponse.StatusCode == System.Net.HttpStatusCode.OK)
-                {
-                    Thread.Sleep(5000);
-
-                    ServerResponse deviceStatusResponse = await apiHelper.SendGetRequestAsync(
-                        "GetStatus",
-                        deviceID,
-                        deviceModelName,
-                        deviceModelVersion
-                    );
-
-                    if (deviceStatusResponse.StatusCode == System.Net.HttpStatusCode.OK)
-                    {
-                        var deviceStatus = deviceStatusResponse.GetContentAs<GetStatusResponse>();
-
-                        if (deviceStatus.FiscalDayStatus == ZimraEGS.ApiClient.Enums.FiscalDayStatus.FiscalDayClosed)
-                        {
-                            return StatusCode((int)deviceStatusResponse.StatusCode, new { Error = deviceStatusResponse.GetFullResponseAsJson() });
-                        }
-
-                        // Modify the business JSON with the new values
-                        var businessJson = model.BusinessDetailJson;
-
-                        // Modify with updated properties
-                        businessJson = RelayDataHelper.ModifyStringCustomFields2(businessJson, ManagerCustomField.FiscalDaySummaryGuid, null);
-
-                        // Create a new BusinessReference object and modify only the needed properties
-                        var businessReference = new BusinessReference
-                        {
-                            LastReceiptCounter = 0, 
-                            LastReceiptHash = "", 
-                            IntegrationType = model.IntegrationType,
-                            DeviceID = model.DeviceID,
-                            DeviceSerialNumber = model.DeviceSerialNumber,
-                            FiscalDayOpened = openDayRequest.FiscalDayOpened,
-                            FiscalDayStatus = deviceStatus.FiscalDayStatus,
-                            LastFiscalDayNo = (int)deviceStatus.LastFiscalDayNo,
-                            LastReceiptGlobalNo = 0  //deviceStatus.LastReceiptGlobalNo
-                        };
-
-                        // Modify the business JSON with the updated BusinessReference details
-                        businessJson = RelayDataHelper.ModifyStringCustomFields2(businessJson, ManagerCustomField.BusinessReferenceGuid, JsonConvert.SerializeObject(businessReference, Formatting.Indented));
-
-                        // Create combined object for API call
-                        var combinedApiObject = new
-                        {
-                            OpenDayRequest = openDayRequest,
-                            OpenDayResponse = openDayResponse.GetContentAs<OpenDayResponse>(),
-                            GetStatusResponse = deviceStatus,
-                            ApiReference = new
-                            {
-                                ApiUrl = $"{model.Api}/business-details-form/38cf4712-6e95-4ce1-b53a-bff03edad273",
-                                SecretKey = model.Token,
-                                Payload = businessJson
-                            }
-                        };
-
-                        // Serialize the combined object to JSON
-                        string combinedJson = JsonConvert.SerializeObject(combinedApiObject, Formatting.Indented);
-
-                        return Ok(combinedJson);
-                    }
-                    return StatusCode((int)openDayResponse.StatusCode, openDayResponse.GetContentAsString());
-                }
-
-                return StatusCode((int)openDayResponse.StatusCode, openDayResponse.GetContentAsString());
+                    Referrer = referrer ?? string.Empty,
+                    Title = "Unknown device",
+                    Problems = ["The device link is not valid. Relay an invoice from Manager and try again."]
+                });
             }
-            catch (Exception ex)
+
+            var result = await _fiscal.CloseDayAsync(device.Id);
+
+            return View("DayResult", new DayResultViewModel
             {
-                return StatusCode(500, Json(new { Error = ex.Message }));
-            }
-        }
-
-        public async Task<IActionResult> AjaxCloseDay([FromForm] CloseDayViewModel model)
-        {
-            try
-            {
-                string jsonBusiness = model.BusinessDetailJson;
-
-                BusinessReference BusinessReference = new BusinessReference();
-                FiscalDaySummary FiscalDaySummary = new FiscalDaySummary();
-                CertificateInfo CertificateInfo = new CertificateInfo();
-
-                string brf = RelayDataHelper.FindStringValueInJson(jsonBusiness, ManagerCustomField.BusinessReferenceGuid);
-                if (!string.IsNullOrEmpty(brf))
-                {
-                    BusinessReference = JsonConvert.DeserializeObject<BusinessReference>(brf);
-                }
-
-                string fds = RelayDataHelper.FindStringValueInJson(jsonBusiness, ManagerCustomField.FiscalDaySummaryGuid);
-                if (!string.IsNullOrEmpty(fds))
-                {
-                    FiscalDaySummary = JsonConvert.DeserializeObject<FiscalDaySummary>(fds);
-                }
-
-                var base64CerInfo = RelayDataHelper.FindStringValueInJson(jsonBusiness, ManagerCustomField.CertificateInfoGuid);
-                if (!string.IsNullOrEmpty(base64CerInfo))
-                {
-                    CertificateInfo = ObjectCompressor.DeserializeFromBase64String<CertificateInfo>(base64CerInfo);
-                }
-
-                var deviceID = CertificateInfo.DeviceID;
-                var deviceModelName = CertificateInfo.DeviceModelName;
-                var deviceModelVersion = CertificateInfo.DeviceModelVersion;
-
-                var closeDayRequest = new CloseDayRequest();
-
-                closeDayRequest.FiscalDayNo = BusinessReference.LastFiscalDayNo;
-
-                closeDayRequest.FiscalDayCounters = FiscalDayProcessor.GetFiscalDayCounter(FiscalDaySummary);
-
-
-                var counterHash = FiscalDayProcessor.ToHashString(closeDayRequest.FiscalDayCounters.ToList());
-
-                string SourcesHash = CertificateInfo.DeviceID.ToString("F0") +
-                    closeDayRequest.FiscalDayNo.ToString("F0") +
-                    BusinessReference.FiscalDayOpened.ToString("yyyy-MM-dd") +
-                    counterHash;
-
-                Console.WriteLine(SourcesHash);
-
-                byte[] hashByte = RSA_CryptoHelper.ComputeSHA256Hash(SourcesHash.ToUpper());
-
-                RSA privateKey = RSA_CryptoHelper.ConvertPrivateKeyFromBase64(CertificateInfo.PrivateKey);
-                byte[] signatureByte = RSA_CryptoHelper.SignDocument(privateKey, hashByte);
-
-                closeDayRequest.FiscalDayDeviceSignature = new SignatureData()
-                {
-                    Hash = hashByte,
-                    Signature = signatureByte ?? Encoding.UTF8.GetBytes("")
-                };
-
-                closeDayRequest.ReceiptCounter = BusinessReference.LastReceiptCounter;
-
-                ApiHelper apiHelper = new ApiHelper(CertificateInfo.Base64Pfx, CertificateInfo.IntegrationType);
-                ServerResponse closeDayResponse = await apiHelper.SendPostRequestAsync<CloseDayRequest>(
-                    "CloseDay",
-                    deviceID,
-                    deviceModelName,
-                    deviceModelVersion,
-                    closeDayRequest
-                );
-
-                GetStatusResponse deviceStatus;
-
-                if (closeDayResponse.StatusCode == System.Net.HttpStatusCode.OK)
-                {
-
-                    Thread.Sleep(10000);
-
-                    ServerResponse statusresponse = await apiHelper.SendGetRequestAsync(
-                        "GetStatus",
-                        deviceID,
-                        deviceModelName,
-                        deviceModelVersion
-                    );
-
-                    if (statusresponse.StatusCode == System.Net.HttpStatusCode.OK)
-                    {
-                        deviceStatus = statusresponse.GetContentAs<GetStatusResponse>();
-
-                        var combinedApiObject = new
-                        {
-                            closeDayRequest,
-                            CloseDayResponse = closeDayResponse.GetContentAs<CloseDayResponse>(),
-                            GetStatusResponse = deviceStatus,
-                        };
-
-                        string combinedJson = JsonConvert.SerializeObject(combinedApiObject, Formatting.Indented);
-                        return Ok(combinedJson);
-                    }
-                }
-
-                return StatusCode((int)closeDayResponse.StatusCode, closeDayResponse.GetContentAsString());
-
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, Json(new { Error = ex.Message }));
-            }
-        }
-
-
-        [HttpPost]
-        public async Task<IActionResult> AjaxIssueCertificate([FromForm] CertInfoViewModel model)
-        {
-            try
-            {
-                var deviceID = model.CertificateInfo.DeviceID;
-                var deviceModelName = model.CertificateInfo.DeviceModelName;
-                var deviceModelVersion = model.CertificateInfo.DeviceModelVersion;
-
-                IssueCertificateRequest IssueCertificateRequest = new IssueCertificateRequest()
-                {
-                    CertificateRequest = model.CertificateInfo.GeneratedCSR
-                };
-
-                ApiHelper apiHelper = new ApiHelper(model.CertificateInfo.Base64Pfx, model.CertificateInfo.IntegrationType);
-                ServerResponse issueCertificateResponse = await apiHelper.SendPostRequestAsync<IssueCertificateRequest>(
-                    "IssueCertificate",
-                    deviceID,
-                    deviceModelName,
-                    deviceModelVersion,
-                    IssueCertificateRequest
-                );
-
-                if (issueCertificateResponse.StatusCode == System.Net.HttpStatusCode.OK)
-                {
-                    IssueCertificateResponse issuedCertificate = issueCertificateResponse.GetContentAs<IssueCertificateResponse>();
-
-                    ServerResponse gerConfigResponse = await apiHelper.SendGetRequestAsync(
-                        "GetConfig",
-                        deviceID,
-                        deviceModelName,
-                        deviceModelVersion
-                    );
-
-                    if (gerConfigResponse.StatusCode == System.Net.HttpStatusCode.OK)
-                    {
-                        var deviceConfig = gerConfigResponse.GetContentAs<GetConfigResponse>();
-
-                        CertificateInfo newCertificateInfo = model.CertificateInfo;
-                        newCertificateInfo.DeviceCertificate = Utilities.CleanBase64String(issuedCertificate.Certificate);
-                        string pfxbyte = Utilities.GeneratePfx(Utilities.CleanBase64String(model.CertificateInfo.PrivateKey), newCertificateInfo.DeviceCertificate, (string)null);
-                        newCertificateInfo.Base64Pfx = pfxbyte;
-                        newCertificateInfo.CertificateValidTill = deviceConfig.CertificateValidTill;
-
-                        model.CertificateInfo = newCertificateInfo;
-                        string Base64Certificate = ObjectCompressor.SerializeToBase64String(newCertificateInfo);
-
-                        // Modify the business JSON with the new values
-                        var businessJson = model.BusinessDetailJson;
-                        businessJson = RelayDataHelper.ModifyStringCustomFields2(businessJson, ManagerCustomField.CertificateInfoGuid, Base64Certificate);
-
-                        // Create combined object for API call
-                        var combinedApiObject = new
-                        {
-                            CertificateInfo = model.CertificateInfo,
-                            IssueCertificateResponse = issueCertificateResponse.GetFullResponseAsJson(),
-                            ApiReference = new
-                            {
-                                ApiUrl = $"{model.Api}/business-details-form/38cf4712-6e95-4ce1-b53a-bff03edad273",
-                                SecretKey = model.Token,
-                                Payload = businessJson
-                            }
-                        };
-
-                        // Serialize the combined object to JSON
-                        string combinedJson = JsonConvert.SerializeObject(combinedApiObject, Formatting.Indented);
-
-                        return Ok(combinedJson);
-                    }
-                    return StatusCode((int)issueCertificateResponse.StatusCode, issueCertificateResponse.GetContentAsString());
-                }
-
-                return StatusCode((int)issueCertificateResponse.StatusCode, issueCertificateResponse.GetContentAsString());
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, Json(new { Error = ex.Message }));
-            }
+                Referrer = referrer ?? string.Empty,
+                Success = result.Success,
+                Message = result.Message,
+                FiscalDayNo = device.FiscalDayNo
+            });
         }
     }
 }

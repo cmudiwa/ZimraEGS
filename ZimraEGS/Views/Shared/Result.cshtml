@@ -1,0 +1,173 @@
+@using ZimraEGS.Helpers
+@using ZimraEGS.Data
+@model ReceiptResultViewModel
+@{
+    ViewData["Title"] = "ZIMRA receipt";
+    var back = Utils.SafeReturnUrl(Model.Referrer);
+    bool approved = Model.Status == ReceiptStatus.Approved;
+    bool dayOpen = Model.FiscalDayStatus != "FiscalDayClosed";
+}
+
+<div class="container-fluid setup-container text-start">
+    <div class="row justify-content-center">
+        <div class="col-md-8 mb-4">
+            <div class="card card-custom">
+                <div class="card-header section-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        @if (approved)
+                        {
+                            <span class="text-success"><i class="fa fa-check-circle"></i></span>
+                            @(Model.AlreadyFiscalised ? "Already fiscalised" : "Fiscalised")
+                        }
+                        else
+                        {
+                            <span class="text-danger"><i class="fa fa-exclamation-triangle"></i></span>
+                            <span>Recorded by ZIMRA with errors</span>
+                        }
+                    </h5>
+                    <span class="badge @(approved ? "bg-success" : "bg-danger")">@Model.Status</span>
+                </div>
+                <div class="card-body">
+
+                    <div id="saveStatus" class="alert alert-info py-2 d-none" role="status"></div>
+
+                    @if (!approved)
+                    {
+                        <div class="alert alert-danger">
+                            ZIMRA has recorded this receipt but flagged it. It stays part of the fiscal day and cannot be sent again.
+                            Correct it by issuing a credit note against this invoice and then a new invoice.
+                        </div>
+                    }
+
+                    @if (Model.ValidationErrors.Count > 0)
+                    {
+                        <ul class="list-group mb-3">
+                            @foreach (var error in Model.ValidationErrors)
+                            {
+                                <li class="list-group-item">
+                                    <span class="badge bg-secondary me-2">@error.ValidationErrorColor</span>
+                                    <strong>@error.ValidationErrorCode</strong> @error.ValidationErrorText
+                                </li>
+                            }
+                        </ul>
+                    }
+
+                    <div class="row">
+                        <div class="col-sm-8">
+                            <table class="table table-sm mb-0">
+                                <tbody>
+                                    @if (!string.IsNullOrEmpty(Model.InvoiceNo))
+                                    {
+                                        <tr><th scope="row">Invoice number</th><td>@Model.InvoiceNo</td></tr>
+                                    }
+                                    @if (!string.IsNullOrEmpty(Model.ReceiptDate))
+                                    {
+                                        <tr><th scope="row">Receipt date</th><td>@Model.ReceiptDate</td></tr>
+                                        <tr><th scope="row">Type</th><td>@Model.ReceiptType</td></tr>
+                                        <tr><th scope="row">Total</th><td>@Model.Currency @Model.Total.ToString("N2")</td></tr>
+                                        <tr><th scope="row">Receipt global number</th><td>@Model.ReceiptGlobalNo</td></tr>
+                                    }
+                                    <tr><th scope="row">Fiscal day</th><td>@Model.FiscalDayNo (@(dayOpen ? "open" : "closed"))</td></tr>
+                                    @if (!string.IsNullOrEmpty(Model.VerificationCode))
+                                    {
+                                        <tr><th scope="row">Verification code</th><td class="font-monospace">@Model.VerificationCode</td></tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="col-sm-4 text-center">
+                            <div id="qrCodeImage" class="d-inline-block bg-white p-2 border"></div>
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(Model.QrCode))
+                    {
+                        <div class="text-break font-monospace small mt-2">
+                            <a href="@Utils.SafeReturnUrl(Model.QrCode)" target="_blank" rel="noopener">@Model.QrCode</a>
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrEmpty(Model.LastCloseDayError))
+                    {
+                        <div class="alert alert-warning mt-3 mb-0">Last attempt to close the fiscal day failed: @Model.LastCloseDayError</div>
+                    }
+
+                    <hr />
+                    <div class="d-flex flex-wrap gap-2 justify-content-between">
+                        <a id="backToManager" class="btn btn-secondary btn-sm @(string.IsNullOrEmpty(back) ? "disabled" : "")" href="@back">Back to Manager</a>
+                        <button type="button" id="retrySave" class="btn btn-outline-primary btn-sm d-none">Save to Manager again</button>
+                        @if (dayOpen)
+                        {
+                            <form method="post" action="@Url.Action("CloseDay", "FiscalDevice")" class="d-inline"
+                                  onsubmit="return confirm('Close the fiscal day now? The next invoice will open a new day.');">
+                                <input type="hidden" name="deviceLink" value="@Model.DeviceLink" />
+                                <input type="hidden" name="referrer" value="@Model.Referrer" />
+                                <button type="submit" class="btn btn-outline-danger btn-sm">Close fiscal day</button>
+                            </form>
+                        }
+                    </div>
+                    <p class="text-muted small mt-3 mb-0">The fiscal day is closed automatically every night. You only need the button to close it earlier.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/qrcode.js"></script>
+    <script>
+        (function () {
+            var calls = @Html.Raw(Utils.ToScriptJson(Model.ManagerCalls));
+            var token = @Html.Raw(Utils.ToScriptJson(Model.Token));
+            var qr = @Html.Raw(Utils.ToScriptJson(Model.QrCode));
+            var back = @Html.Raw(Utils.ToScriptJson(back));
+            var autoReturn = @(Model.AutoReturn ? "true" : "false");
+
+            var statusBox = document.getElementById('saveStatus');
+            var retryButton = document.getElementById('retrySave');
+
+            function show(kind, text) {
+                statusBox.className = 'alert py-2 alert-' + kind;
+                statusBox.textContent = text;
+            }
+
+            if (qr) {
+                new QRCode(document.getElementById('qrCodeImage'), {
+                    text: qr, width: 120, height: 120, correctLevel: QRCode.CorrectLevel.L
+                });
+            }
+
+            // Store the result in Manager. This only updates what Manager displays; the receipt itself
+            // is already safe on the server, so a failure here can simply be retried.
+            async function saveToManager() {
+                if (!calls.length) return;
+                retryButton.classList.add('d-none');
+                show('info', 'Saving the result in Manager…');
+                try {
+                    for (var i = 0; i < calls.length; i++) {
+                        var response = await fetch(calls[i].ApiUrl, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                            body: calls[i].Payload
+                        });
+                        if (!response.ok) {
+                            throw new Error('Manager answered ' + response.status);
+                        }
+                    }
+                    if (autoReturn && back) {
+                        show('success', 'Saved. Returning to Manager…');
+                        window.location.replace(back);
+                    } else {
+                        show('success', 'The result is saved in Manager.');
+                    }
+                } catch (error) {
+                    show('warning', 'The receipt is recorded by ZIMRA, but the result could not be saved in Manager (' + error.message + '). Use "Save to Manager again", or relay the invoice once more.');
+                    retryButton.classList.remove('d-none');
+                }
+            }
+
+            retryButton.addEventListener('click', saveToManager);
+            saveToManager();
+        })();
+    </script>
+}

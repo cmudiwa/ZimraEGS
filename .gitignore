@@ -363,3 +363,8 @@ MigrationBackup/
 FodyWeavers.xsd
 /ZimraDigitalSignature/ZimraDigitalSignature.csproj
 /ZimraEGS/RefScript/TextFile.txt
+
+# ZimraEGS local data (database and encryption keys)
+ZimraEGS-data/
+ZimraEGS/Data/*.db*
+ZimraEGS/Data/keys/

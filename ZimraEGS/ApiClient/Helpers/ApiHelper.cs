@@ -1,234 +1,160 @@
 ﻿using Newtonsoft.Json;
-using System.Net;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using ZimraEGS.ApiClient.Models;
 
 namespace ZimraEGS.ApiClient.Helpers
 {
-    public class ApiHelper
+    public class FdmsOptions
+    {
+        /// <summary>Overrides the FDMS base URL for both environments. Meant for testing against a stand-in.</summary>
+        public string? BaseUrlOverride { get; set; }
+
+        /// <summary>
+        /// Turns off validation of the FDMS server certificate. Leave this off; only switch it on if the
+        /// host cannot build the ZIMRA certificate chain and you accept the risk.
+        /// </summary>
+        public bool SkipServerCertificateValidation { get; set; }
+
+        public int TimeoutSeconds { get; set; } = 30;
+    }
+
+    /// <summary>The FDMS calls a registered device makes. Abstracted so the flow can be tested without ZIMRA.</summary>
+    public interface IFdmsClient : IDisposable
+    {
+        Task<ServerResponse> GetStatusAsync();
+        Task<ServerResponse> GetConfigAsync();
+        Task<ServerResponse> OpenDayAsync(OpenDayRequest request);
+        Task<ServerResponse> SubmitReceiptAsync(SubmitReceiptRequest request);
+        Task<ServerResponse> CloseDayAsync(CloseDayRequest request);
+        Task<ServerResponse> IssueCertificateAsync(IssueCertificateRequest request);
+    }
+
+    public interface IFdmsClientFactory
+    {
+        IFdmsClient CreateDeviceClient(PlatformType environment, int deviceID, string modelName, string modelVersion, string pfxBase64);
+        ApiHelper CreatePublicClient(PlatformType environment);
+    }
+
+    public class FdmsClientFactory : IFdmsClientFactory
+    {
+        private readonly FdmsOptions _options;
+
+        public FdmsClientFactory(Microsoft.Extensions.Options.IOptions<FdmsOptions> options)
+        {
+            _options = options.Value;
+        }
+
+        public IFdmsClient CreateDeviceClient(PlatformType environment, int deviceID, string modelName, string modelVersion, string pfxBase64)
+        {
+            return new ApiHelper(pfxBase64, environment, _options) { DeviceID = deviceID, DeviceModelName = modelName, DeviceModelVersion = modelVersion };
+        }
+
+        public ApiHelper CreatePublicClient(PlatformType environment)
+        {
+            return new ApiHelper(environment, _options);
+        }
+    }
+
+    public class ApiHelper : IFdmsClient
     {
         private readonly HttpClient _httpClient;
         private readonly string _baseUrl;
+        private readonly X509Certificate2? _certificate;
 
-        public ApiHelper(PlatformType environmentType)
+        public int DeviceID { get; init; }
+        public string DeviceModelName { get; init; } = "Server";
+        public string DeviceModelVersion { get; init; } = "v1";
+
+        /// <summary>Client for the public endpoints, which need no device certificate.</summary>
+        public ApiHelper(PlatformType environmentType, FdmsOptions? options = null)
         {
-            var baseUrl = Utilities.GetBaseUrl(environmentType);
-            _baseUrl = baseUrl.EndsWith("/") ? baseUrl.TrimEnd('/') : baseUrl;
-            _httpClient = new HttpClient();
+            options ??= new FdmsOptions();
+            _baseUrl = ResolveBaseUrl(environmentType, options);
+            _httpClient = new HttpClient(CreateHandler(options, null)) { Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds) };
         }
 
-        public ApiHelper(string pfxBase64, PlatformType environmentType)
+        /// <summary>Client for the device endpoints, authenticated with the device certificate.</summary>
+        public ApiHelper(string pfxBase64, PlatformType environmentType, FdmsOptions? options = null)
         {
-            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13;
+            options ??= new FdmsOptions();
+            _baseUrl = ResolveBaseUrl(environmentType, options);
 
-            var baseUrl = Utilities.GetBaseUrl(environmentType);
-            _baseUrl = baseUrl.EndsWith("/") ? baseUrl.TrimEnd('/') : baseUrl;
+            // EphemeralKeySet is not supported on macOS; the default key set works everywhere.
+            _certificate = new X509Certificate2(Convert.FromBase64String(pfxBase64), (string?)null,
+                OperatingSystem.IsMacOS() ? X509KeyStorageFlags.DefaultKeySet : X509KeyStorageFlags.EphemeralKeySet);
 
-            try
-            {
-                var handler = new HttpClientHandler
-                {
-                    ServerCertificateCustomValidationCallback = (message, cert, chain, sslPolicyErrors) =>
-                    {
-                        if (sslPolicyErrors != System.Net.Security.SslPolicyErrors.None)
-                        {
-                            Console.WriteLine($"SSL Policy Errors: {sslPolicyErrors}");
-                        }
-                        return true;
-                    },
-
-                    SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13
-                };
-
-                try
-                {
-                    var certificate = LoadCertificateFromPfx(pfxBase64, null);
-
-                    handler.ClientCertificates.Add(certificate);
-
-                    _httpClient = new HttpClient(handler)
-                    {
-                        Timeout = TimeSpan.FromSeconds(30)
-                    };
-                }
-                catch (Exception certEx)
-                {
-                    Console.WriteLine($"Certificate Loading Error: {certEx.Message}");
-                    throw;
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"TLS Setup Error: {ex.Message}");
-                throw; 
-            }
+            _httpClient = new HttpClient(CreateHandler(options, _certificate)) { Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds) };
         }
 
-        private X509Certificate2 LoadCertificateFromPfx(string pfxBase64, string? password)
+        private static string ResolveBaseUrl(PlatformType environmentType, FdmsOptions options)
         {
-            byte[] pfxBytes = Convert.FromBase64String(pfxBase64);
-
-            var certificate = new X509Certificate2(pfxBytes, password, X509KeyStorageFlags.MachineKeySet);
-
-            return certificate;
+            var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrlOverride) ? Utilities.GetBaseUrl(environmentType) : options.BaseUrlOverride;
+            return baseUrl.TrimEnd('/');
         }
 
-        public async Task<ServerResponse> SendGetRequestAsync(string lastPath, int? deviceID, string deviceModelName, string deviceModelVersion)
+        private static HttpClientHandler CreateHandler(FdmsOptions options, X509Certificate2? certificate)
         {
-            if (string.IsNullOrWhiteSpace(lastPath) || !deviceID.HasValue)
-                throw new ArgumentException("Invalid arguments provided for the API request.");
-
-            string endpoint = $"{_baseUrl}/Device/v1/{deviceID}/{lastPath}";
-
-            var requestMessage = new HttpRequestMessage(HttpMethod.Get, endpoint);
-
-            requestMessage.Headers.Add("DeviceModelName", deviceModelName);
-            requestMessage.Headers.Add("DeviceModelVersion", deviceModelVersion);
-
-            try
+            var handler = new HttpClientHandler
             {
-                using var response = await _httpClient.SendAsync(requestMessage);
-                var responseContent = await response.Content.ReadAsStringAsync();
-
-                return new ServerResponse(
-                    endpoint,
-                    response.StatusCode,
-                    response.Headers,
-                    responseContent
-                );
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error in SendGetRequestAsync: {ex.Message}");
-                if (ex.InnerException != null)
-                {
-                    Console.WriteLine($"Inner Exception: {ex.InnerException.Message}");
-                }
-                throw new Exception($"An error occurred while calling the API: {ex.Message}", ex);
-            }
-        }
-
-        public async Task<ServerResponse> VerifyTaxpayerInformationAsync(int deviceID, VerifyTaxpayerInformationRequest body)
-        {
-            string endpoint = $"{_baseUrl}/Public/v1/{deviceID}/VerifyTaxpayerInformation";
-
-            string requestBody = JsonConvert.SerializeObject(body);
-
-            var requestMessage = new HttpRequestMessage(HttpMethod.Post, endpoint)
-            {
-                Content = new StringContent(requestBody, Encoding.UTF8, "application/json")
+                SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13
             };
 
-            try
+            if (options.SkipServerCertificateValidation)
             {
-                using var response = await _httpClient.SendAsync(requestMessage);
-                var responseContent = await response.Content.ReadAsStringAsync();
-
-                return new ServerResponse(
-                    endpoint,
-                    response.StatusCode,
-                    response.Headers,
-                    responseContent
-                );
+                handler.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
             }
-            catch (Exception ex)
+
+            if (certificate != null)
             {
-                throw new Exception($"An error occurred while calling the API: {ex.Message}", ex);
+                handler.ClientCertificateOptions = ClientCertificateOption.Manual;
+                handler.ClientCertificates.Add(certificate);
             }
-        }
-        public async Task<ServerResponse> RegisterDeviceAsync(int? deviceID, string deviceModelName, string deviceModelVersion, RegisterDeviceRequest body)
-        {
-            string endpoint = $"{_baseUrl}/Public/v1/{deviceID}/RegisterDevice";
 
-            string requestBody = JsonConvert.SerializeObject(body);
-
-            var requestMessage = new HttpRequestMessage(HttpMethod.Post, endpoint)
-            {
-                Content = new StringContent(requestBody, Encoding.UTF8, "application/json")
-            };
-
-            requestMessage.Headers.Add("DeviceModelName", deviceModelName);
-            requestMessage.Headers.Add("DeviceModelVersion", deviceModelVersion);
-
-            try
-            {
-                using var response = await _httpClient.SendAsync(requestMessage);
-                var responseContent = await response.Content.ReadAsStringAsync();
-
-                return new ServerResponse(
-                    endpoint,
-                    response.StatusCode,
-                    response.Headers,
-                    responseContent
-                );
-            }
-            catch (Exception ex)
-            {
-                throw new Exception($"An error occurred while calling the API: {ex.Message}", ex);
-            }
+            return handler;
         }
 
-        public async Task<ServerResponse> GetConfigAsync(int? deviceID, string deviceModelName, string deviceModelVersion)
+        public Task<ServerResponse> GetStatusAsync() => SendAsync(HttpMethod.Get, $"Device/v1/{DeviceID}/GetStatus", null, true);
+        public Task<ServerResponse> GetConfigAsync() => SendAsync(HttpMethod.Get, $"Device/v1/{DeviceID}/GetConfig", null, true);
+        public Task<ServerResponse> OpenDayAsync(OpenDayRequest request) => SendAsync(HttpMethod.Post, $"Device/v1/{DeviceID}/OpenDay", request, true);
+        public Task<ServerResponse> SubmitReceiptAsync(SubmitReceiptRequest request) => SendAsync(HttpMethod.Post, $"Device/v1/{DeviceID}/SubmitReceipt", request, true);
+        public Task<ServerResponse> CloseDayAsync(CloseDayRequest request) => SendAsync(HttpMethod.Post, $"Device/v1/{DeviceID}/CloseDay", request, true);
+        public Task<ServerResponse> IssueCertificateAsync(IssueCertificateRequest request) => SendAsync(HttpMethod.Post, $"Device/v1/{DeviceID}/IssueCertificate", request, true);
+
+        public Task<ServerResponse> VerifyTaxpayerInformationAsync(int deviceID, VerifyTaxpayerInformationRequest body)
+            => SendAsync(HttpMethod.Post, $"Public/v1/{deviceID}/VerifyTaxpayerInformation", body, false);
+
+        public Task<ServerResponse> RegisterDeviceAsync(int deviceID, string deviceModelName, string deviceModelVersion, RegisterDeviceRequest body)
+            => SendAsync(HttpMethod.Post, $"Public/v1/{deviceID}/RegisterDevice", body, true, deviceModelName, deviceModelVersion);
+
+        private async Task<ServerResponse> SendAsync(HttpMethod method, string path, object? body, bool deviceHeaders, string? modelName = null, string? modelVersion = null)
         {
-            string endpoint = $"{_baseUrl}/Device/v1/{deviceID}/GetConfig";
+            string endpoint = $"{_baseUrl}/{path}";
 
-            var requestMessage = new HttpRequestMessage(HttpMethod.Get, endpoint);
-
-            requestMessage.Headers.Add("DeviceModelName", deviceModelName);
-            requestMessage.Headers.Add("DeviceModelVersion", deviceModelVersion);
-
-            try
-            {
-                using var response = await _httpClient.SendAsync(requestMessage);
-                var responseContent = await response.Content.ReadAsStringAsync();
-
-                return new ServerResponse(
-                    endpoint,
-                    response.StatusCode,
-                    response.Headers,
-                    responseContent
-                );
-            }
-            catch (Exception ex)
-            {
-                throw new Exception($"An error occurred while calling the API: {ex.Message}", ex);
-            }
-        }
-        
-        public async Task<ServerResponse> SendPostRequestAsync<TBody>(string lastPath, int? deviceID, string deviceModelName, string deviceModelVersion, TBody? body)
-        {
-            string endpoint = $"{_baseUrl}/Device/v1/{deviceID}/{lastPath}";
-
-            string requestBody = JsonConvert.SerializeObject(body);
-
-            var requestMessage = new HttpRequestMessage(HttpMethod.Post, endpoint);
+            using var requestMessage = new HttpRequestMessage(method, endpoint);
 
             if (body != null)
             {
-                requestMessage.Content = new StringContent(requestBody, Encoding.UTF8, "application/json");
-            };
-
-            requestMessage.Headers.Add("DeviceModelName", deviceModelName);
-            requestMessage.Headers.Add("DeviceModelVersion", deviceModelVersion);
-
-            try
-            {
-                using var response = await _httpClient.SendAsync(requestMessage);
-                var responseContent = await response.Content.ReadAsStringAsync();
-
-                return new ServerResponse(
-                    endpoint,
-                    response.StatusCode,
-                    response.Headers,
-                    responseContent
-                );
+                requestMessage.Content = new StringContent(JsonConvert.SerializeObject(body), Encoding.UTF8, "application/json");
             }
-            catch (Exception ex)
+
+            if (deviceHeaders)
             {
-                throw new Exception($"An error occurred while calling the API: {ex.Message}", ex);
+                requestMessage.Headers.Add("DeviceModelName", modelName ?? DeviceModelName);
+                requestMessage.Headers.Add("DeviceModelVersion", modelVersion ?? DeviceModelVersion);
             }
+
+            using var response = await _httpClient.SendAsync(requestMessage);
+            var responseContent = await response.Content.ReadAsStringAsync();
+
+            return new ServerResponse(endpoint, response.StatusCode, responseContent);
         }
 
+        public void Dispose()
+        {
+            _httpClient.Dispose();
+            _certificate?.Dispose();
+            GC.SuppressFinalize(this);
+        }
     }
 }

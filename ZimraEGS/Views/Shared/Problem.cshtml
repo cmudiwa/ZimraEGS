@@ -1,0 +1,31 @@
+@using ZimraEGS.Helpers
+@model ProblemViewModel
+@{
+    ViewData["Title"] = "Not sent to ZIMRA";
+    var back = Utils.SafeReturnUrl(Model.Referrer);
+}
+
+<div class="container-fluid setup-container text-start">
+    <div class="row justify-content-center">
+        <div class="col-md-8 mb-4">
+            <div class="card card-custom">
+                <div class="card-header section-header">
+                    <h5 class="mb-0"><span class="text-warning"><i class="fa fa-exclamation-circle"></i></span> @Model.Title</h5>
+                </div>
+                <div class="card-body">
+                    @if (Model.Problems.Count > 0)
+                    {
+                        <ul class="mb-3">
+                            @foreach (var problem in Model.Problems)
+                            {
+                                <li>@problem</li>
+                            }
+                        </ul>
+                    }
+                    <p class="text-muted">Nothing was changed in Manager. Fix the points above and click Relay on the invoice again.</p>
+                    <a class="btn btn-secondary btn-sm @(string.IsNullOrEmpty(back) ? "disabled" : "")" href="@back">Back to Manager</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

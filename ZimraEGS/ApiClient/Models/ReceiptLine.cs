@@ -23,20 +23,20 @@
         public string ReceiptLineName { get; set; }
 
         [Newtonsoft.Json.JsonProperty("receiptLinePrice", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public double? ReceiptLinePrice { get; set; }
+        public decimal? ReceiptLinePrice { get; set; }
 
         [Newtonsoft.Json.JsonProperty("receiptLineQuantity", Required = Newtonsoft.Json.Required.Always)]
-        public double ReceiptLineQuantity { get; set; }
+        public decimal ReceiptLineQuantity { get; set; }
 
         [Newtonsoft.Json.JsonProperty("receiptLineTotal", Required = Newtonsoft.Json.Required.Always)]
-        public double ReceiptLineTotal { get; set; }
+        public decimal ReceiptLineTotal { get; set; }
 
         //[Newtonsoft.Json.JsonProperty("taxCode", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         //[System.ComponentModel.DataAnnotations.StringLength(3)]
         //public string TaxCode { get; set; }
 
         [Newtonsoft.Json.JsonProperty("taxPercent", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public double? TaxPercent { get; set; }
+        public decimal? TaxPercent { get; set; }
 
         [Newtonsoft.Json.JsonProperty("taxID", Required = Newtonsoft.Json.Required.Always)]
         public int TaxID { get; set; }

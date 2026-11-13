@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using System.Net;
 using System.Net.Http.Headers;
 
@@ -8,15 +8,33 @@ namespace ZimraEGS.ApiClient.Helpers
     {
         public string Endpoint { get; }
         public HttpStatusCode StatusCode { get; }
-        public HttpResponseHeaders Headers { get; }
         public string ResponseContent { get; } = "{}";
 
-        public ServerResponse(string endpoint, HttpStatusCode statusCode, HttpResponseHeaders headers, string responseContent)
+        public bool IsSuccess => StatusCode == HttpStatusCode.OK;
+
+        public ServerResponse(string endpoint, HttpStatusCode statusCode, string responseContent)
         {
             Endpoint = endpoint;
             StatusCode = statusCode;
-            Headers = headers;
             ResponseContent = responseContent;
+        }
+
+        /// <summary>A short, human readable description of a failed call, taken from the FDMS problem details.</summary>
+        public string DescribeError()
+        {
+            try
+            {
+                var obj = Newtonsoft.Json.Linq.JObject.Parse(ResponseContent);
+                var parts = new[] { (string?)obj["errorCode"], (string?)obj["title"], (string?)obj["detail"] }
+                    .Where(x => !string.IsNullOrWhiteSpace(x));
+                var text = string.Join(" - ", parts);
+                if (!string.IsNullOrEmpty(text)) return $"{text} (HTTP {(int)StatusCode})";
+            }
+            catch (JsonException) { }
+
+            var raw = string.IsNullOrWhiteSpace(ResponseContent) ? StatusCode.ToString() : ResponseContent;
+            if (raw.Length > 400) raw = raw[..400];
+            return $"{raw} (HTTP {(int)StatusCode})";
         }
 
         public T GetContentAs<T>()
@@ -42,6 +60,12 @@ namespace ZimraEGS.ApiClient.Helpers
             return ResponseContent;
         }
 
+        private static object? TryParse(string content)
+        {
+            try { return JsonConvert.DeserializeObject(content); }
+            catch (JsonException) { return content; }
+        }
+
         public string GetFullResponseAsJson()
         {
             var responseLog = new
@@ -49,7 +73,7 @@ namespace ZimraEGS.ApiClient.Helpers
                 Endpoint,
                 StatusCode = (int)StatusCode,
                 StatusDescription = StatusCode.ToString(),
-                ResponseContent = JsonConvert.DeserializeObject(ResponseContent)
+                ResponseContent = TryParse(ResponseContent)
             };
 
             return JsonConvert.SerializeObject(responseLog, Formatting.Indented);

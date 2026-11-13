@@ -9,16 +9,16 @@
         public string TaxCode { get; set; }
 
         [Newtonsoft.Json.JsonProperty("taxPercent", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public double? TaxPercent { get; set; }
+        public decimal? TaxPercent { get; set; }
 
         [Newtonsoft.Json.JsonProperty("taxID", Required = Newtonsoft.Json.Required.Always)]
         public int TaxID { get; set; }
 
         [Newtonsoft.Json.JsonProperty("taxAmount", Required = Newtonsoft.Json.Required.Always)]
-        public double TaxAmount { get; set; }
+        public decimal TaxAmount { get; set; }
 
         [Newtonsoft.Json.JsonProperty("salesAmountWithTax", Required = Newtonsoft.Json.Required.Always)]
-        public double SalesAmountWithTax { get; set; }
+        public decimal SalesAmountWithTax { get; set; }
 
         [Newtonsoft.Json.JsonIgnore]
         public string TaxPersenString => TaxPercent.HasValue

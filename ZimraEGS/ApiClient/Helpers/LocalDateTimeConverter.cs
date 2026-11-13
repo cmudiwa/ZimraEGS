@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using System.Globalization;
 
 namespace ZimraEGS.ApiClient.Helpers
@@ -28,7 +28,7 @@ namespace ZimraEGS.ApiClient.Helpers
         {
             if (value is DateTimeOffset dateTimeOffset)
             {
-                writer.WriteValue(dateTimeOffset.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture));
+                writer.WriteValue(dateTimeOffset.ToOffset(TimeSpan.FromHours(2)).ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture));
             }
             else
             {
@@ -38,16 +38,36 @@ namespace ZimraEGS.ApiClient.Helpers
 
         public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
         {
+            // Newtonsoft may already have parsed the token into a date, depending on DateParseHandling.
+            if (reader.Value is DateTimeOffset parsedOffset)
+            {
+                return parsedOffset;
+            }
+            if (reader.Value is DateTime parsedDate)
+            {
+                return parsedDate.Kind == DateTimeKind.Utc
+                    ? new DateTimeOffset(parsedDate).ToOffset(TimeSpan.FromHours(2))
+                    : new DateTimeOffset(DateTime.SpecifyKind(parsedDate, DateTimeKind.Unspecified), TimeSpan.FromHours(2));
+            }
+
             var value = reader.Value?.ToString();
 
             if (string.IsNullOrEmpty(value))
             {
-                return null;
+                return objectType == typeof(DateTimeOffset) ? default(DateTimeOffset) : null;
             }
 
-            if (DateTime.TryParseExact(value, SupportedDateFormats, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var localDateTime))
+            // FDMS sends Zimbabwe local time (UTC+2) without an offset. Interpret it as such
+            // regardless of the time zone of the machine this runs on.
+            if (DateTimeOffset.TryParseExact(value, "yyyy-MM-ddTHH:mm:sszzz", CultureInfo.InvariantCulture, DateTimeStyles.None, out var withOffset))
             {
-                return new DateTimeOffset(localDateTime, TimeZoneInfo.Local.GetUtcOffset(localDateTime));
+                return withOffset;
+            }
+
+            if (DateTime.TryParseExact(value, SupportedDateFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var localDateTime)
+                || DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out localDateTime))
+            {
+                return new DateTimeOffset(DateTime.SpecifyKind(localDateTime, DateTimeKind.Unspecified), TimeSpan.FromHours(2));
             }
 
             throw new JsonSerializationException($"Unable to parse date: {value}");
@@ -56,7 +76,7 @@ namespace ZimraEGS.ApiClient.Helpers
 
         public override bool CanConvert(Type objectType)
         {
-            return objectType == typeof(DateTimeOffset);
+            return objectType == typeof(DateTimeOffset) || objectType == typeof(DateTimeOffset?);
         }
     }
 }

@@ -6,7 +6,7 @@
         public DateTimeOffset DueDateDate { get; set; }
         public string Reference { get; set; }
         public RefInvoice RefInvoice { get; set; }
-        public double ExchangeRate { get; set; } = 1;
+        public decimal ExchangeRate { get; set; } = 1;
         public string Description { get; set; }
         public List<Line> Lines { get; set; }
         public bool HasLineNumber { get; set; } = false;
@@ -18,9 +18,9 @@
     {
         public LineItem Item { get; set; }
         public string LineDescription { get; set; }
-        public double Qty { get; set; } = 0;
-        public double UnitPrice { get; set; } = 0;
-        public double DiscountAmount { get; set; } = 0;
+        public decimal Qty { get; set; } = 0;
+        public decimal UnitPrice { get; set; } = 0;
+        public decimal DiscountAmount { get; set; } = 0;
         public TaxCode TaxCode { get; set; }
         public CustomFields2 CustomFields2 { get; set; }
     }
@@ -47,7 +47,7 @@
     public class TaxCode
     {
         public string Name { get; set; } = "A";
-        public double Rate { get; set; } = 0;
+        public decimal Rate { get; set; } = 0;
     }
     public class RefInvoice
     {

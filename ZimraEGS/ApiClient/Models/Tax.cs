@@ -6,7 +6,7 @@
     public class Tax
     {
         [Newtonsoft.Json.JsonProperty("taxPercent", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public double? TaxPercent { get; set; }
+        public decimal? TaxPercent { get; set; }
 
         [Newtonsoft.Json.JsonProperty("taxName", Required = Newtonsoft.Json.Required.Always)]
         [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]

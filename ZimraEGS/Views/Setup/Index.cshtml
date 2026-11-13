@@ -1,4 +1,4 @@
-﻿@model ZimraEGS.Models.SetupViewModel
+@model ZimraEGS.Models.SetupViewModel
 
 @{
     ViewData["Title"] = "Setup Wizard";
@@ -14,13 +14,12 @@
    <form id="certInfoForm" action="/Setup/SaveCertificate" method="post">
 
         <input type="hidden" name="Referrer" value="@Model.Referrer" />
-        <input type="hidden" name="BusinessDetails" value="@Model.BusinessDetails" />
+        <input type="hidden" name="BusinessDetailsJson" value="@Model.BusinessDetailsJson" />
+        <input type="hidden" id="DeviceLink" name="DeviceLink" value="@Model.DeviceLink" />
         <input type="hidden" name="Api" value="@Model.Api" />
         <input type="hidden" name="Token" value="@Model.Token" />
 
         <input type="hidden" id="isFileReady" value="@Model.IsFileReady.ToString().ToLower()" />
-        <input type="hidden" id="fileData" value="@Model.FileContent" />
-        <input type="hidden" name="Filename" value="@Model.Filename" />
 
         <!-- Business Data Setup Section -->
         <div class="col-md-12 mb-4">
@@ -210,16 +209,11 @@
                                                 <textarea asp-for="@Model.CertificateInfo.GeneratedCSR" class="form-control form-control-sm" readonly></textarea>
                                             </div>
                                             <div class="col-md-6 mb-3">
-                                                <label class="form-label" asp-for="@Model.CertificateInfo.PrivateKey">Generated PrivateKey</label>
-                                                <textarea asp-for="@Model.CertificateInfo.PrivateKey" class="form-control form-control-sm" readonly></textarea>
-                                            </div>
-                                            <div class="col-md-6 mb-3">
                                                 <label class="form-label" asp-for="@Model.CertificateInfo.DeviceCertificate">Device Certificate</label>
                                                 <textarea asp-for="@Model.CertificateInfo.DeviceCertificate" class="form-control form-control-sm" readonly></textarea>
                                             </div>
-                                            <div class="col-md-6 mb-3">
-                                                <label class="form-label" asp-for="@Model.CertificateInfo.Base64Pfx">Base64 Pfx</label>
-                                                <textarea asp-for="@Model.CertificateInfo.Base64Pfx" class="form-control form-control-sm" readonly></textarea>
+                                            <div class="col-md-12">
+                                                <p class="text-muted small mb-0">The device's private key is generated and kept on the server. It is never sent to the browser or stored in Manager.</p>
                                             </div>
                                         </div>
                                     </div>
@@ -270,7 +264,7 @@
                                                 <div class="row">
                                                     <div class="col-md-6 offset-6 mb-3">
                                                         <button type="submit" id="downloadCertificateButton" class="btn btn-primary btn-sm w-100">
-                                                            Download Certificate
+                                                            Save and Finish
                                                         </button>
                                                     </div>
                                                 </div>
@@ -342,7 +336,7 @@
             }
             
             function updateControlAtribut(inputClass) {
-                var isReadonly = $('#CertificateInfo_Base64Pfx').val();
+                var isReadonly = $('#DeviceLink').val();
                 var specificInputs = document.querySelectorAll("." + inputClass);
                 specificInputs.forEach(function (input) {
                     if (isReadonly) {
@@ -508,9 +502,8 @@
                         }
 
                         $('#CertificateInfo_GeneratedCSR').val(response.generatedCsr);
-                        $('#CertificateInfo_PrivateKey').val(response.privateKey);
                         $('#CertificateInfo_DeviceCertificate').val(response.deviceCertificate);
-                        $('#CertificateInfo_Base64Pfx').val(response.base64Pfx);
+                        $('#DeviceLink').val(response.deviceLink);
 
                         enableButton('#getConfigButton');
                         disableButton('#registerDeviceButton');
@@ -542,17 +535,8 @@
                 showLoading();
 
                 var GetConfigDto = {
-                    IntegrationType: $('#CertificateInfo_IntegrationType').val(),
-                    DeviceID: parseInt($('#CertificateInfo_DeviceID').val(), 10),  
-                    DeviceSerialNumber: $('#CertificateInfo_DeviceSerialNumber').val(),
-                    DeviceModelName: $('#CertificateInfo_DeviceModelName').val(),
-                    DeviceModelVersion: $('#CertificateInfo_DeviceModelVersion').val(),
-                    PrivateKey: $('#CertificateInfo_PrivateKey').val(),
-                    DeviceCertificate: $('#CertificateInfo_DeviceCertificate').val(),
-                    Base64Pfx: $('#CertificateInfo_Base64Pfx').val()
+                    DeviceLink: $('#DeviceLink').val()
                 };
-
-                console.log(JSON.stringify(GetConfigDto, null, 2));
 
                 if (Object.values(GetConfigDto).some(val => !val)) {
                     hideLoading();
@@ -586,6 +570,8 @@
                         $('#CertificateInfo_QrUrl').val(response.qrUrl);
 
                         enableButton('#downloadCertificateButton');
+                        // Show the tab that holds the configuration and the final Save button.
+                        bootstrap.Tab.getOrCreateInstance(document.getElementById('nav-configuration-tab')).show();
                         hideLoading();
                     },
                     error: function (xhr) {
@@ -612,6 +598,7 @@
             disableButton('#registerDeviceButton');
             disableButton('#getConfigButton');
             disableButton('#downloadCertificateButton');
+            if ($('#isFileReady').val() === 'true') { enableButton('#downloadCertificateButton'); }
 
             updateControlAtribut('readonly-control');
 
@@ -622,100 +609,36 @@
 
     <script type="text/javascript">
 
+        // After "Save and Finish": store the device link in Manager's business details.
         document.addEventListener('DOMContentLoaded', function () {
 
-            var isFileReady = '@Model.IsFileReady'.toLowerCase() === 'true';
-            var businessDetails = @Html.Raw(Json.Serialize(Model.BusinessDetailsJson));
-            var apiUrl = '@Model.Api' + '/business-details-form/38cf4712-6e95-4ce1-b53a-bff03edad273';
-            var secretKey = '@Html.Raw(@Model.Token)';
+            var isReady = @(Model.IsFileReady ? "true" : "false");
+            if (!isReady) return;
 
-            console.log(secretKey);
+            var payload = @Html.Raw(ZimraEGS.Helpers.Utils.ToScriptJson(Model.BusinessDetailsJson));
+            var apiUrl = @Html.Raw(ZimraEGS.Helpers.Utils.ToScriptJson((Model.Api ?? "").TrimEnd('/') + "/business-details-form/" + ZimraEGS.Services.ManagerWriteBack.BusinessDetailsFormKey));
+            var secretKey = @Html.Raw(ZimraEGS.Helpers.Utils.ToScriptJson(Model.Token));
+            var referrer = @Html.Raw(ZimraEGS.Helpers.Utils.ToScriptJson(ZimraEGS.Helpers.Utils.SafeReturnUrl(Model.Referrer)));
 
-            var fileData = '@Html.Raw(Model.FileContent)';
-            var fileName = '@Model.Filename';
-
-            var message = "";
-
-
-            if (isFileReady) {
-                var payload;
-                try {
-                    payload = JSON.parse(businessDetails);
-                    console.log('Parsed Payload:', payload);
-                } catch (error) {
-                    console.error("Error parsing businessDetails JSON:", error);
-                    message += `Error parsing businessDetails JSON: ${error.message}\n`;
-                    return;
-                }
-
-                if (payload) {
-                    fetch(apiUrl, {
-                        method: 'PUT',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            //'X-API-KEY': secretKey
-                            'Authorization': `Bearer ${secretKey}`
-                        },
-                        body: payload
-                    })
-                        .then(response => {
-                            console.log('Network Response Status:', response.status);
-                            return response.text().then(text => ({
-                                status: response.status,
-                                ok: response.ok,
-                                body: text
-                            }));
-                        })
-                        .then(response => {
-                            if (response.ok) {
-                                console.log('Update Zimra Reference successful!');
-                                message += 'Update Zimra Reference: successful\n';
-                            } else {
-                                console.error('Error response body:', response.body);
-                                message += `Update Zimra Reference Error: Network response was not ok. ${response.body}\n`;
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Update Zimra Reference Error:', error.message);
-                            message += `Update Zimra Reference Error: ${error.message}\n`;
-                        })
-                        .finally(() => {
-                            if (isFileReady) {
-                                if (fileData && fileName) {
-                                    downloadFile(fileData, fileName);
-                                } else {
-                                    console.error('File data or filename is missing.');
-                                    message += 'File data or filename is missing.\n';
-                                }
-                            }
-                            alert(message);
-                        });
-                } else {
-                    console.error("Payload is null or undefined");
-                }
-            }
+            fetch(apiUrl, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${secretKey}`
+                },
+                body: payload
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Manager answered ' + response.status);
+                    }
+                    alert('Registration complete. The device is linked to this business.\n\nYou can now relay invoices from Manager.');
+                    if (referrer) { window.location.href = referrer; }
+                })
+                .catch(error => {
+                    alert('The device is registered on the server, but the link could not be saved in Manager: ' + error.message + '\n\nClick "Save and Finish" again.');
+                });
         });
-
-        function downloadFile(base64Data, fileName) {
-            var binaryString = atob(base64Data);
-            var binaryLen = binaryString.length;
-            var bytes = new Uint8Array(binaryLen);
-
-            for (var i = 0; i < binaryLen; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
-            }
-
-            var blob = new Blob([bytes], { type: "application/zip" });
-
-            var link = document.createElement("a");
-            var url = URL.createObjectURL(blob);
-            link.href = url;
-            link.download = fileName;
-
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
 
     </script>
 
