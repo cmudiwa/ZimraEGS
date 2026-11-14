@@ -72,6 +72,63 @@ namespace ZimraEGS.Services
             return data;
         }
 
+        // Manager's current API takes enum values as numbers.
+        private static readonly Dictionary<string, Dictionary<string, int>> EnumValues = new()
+        {
+            ["text-custom-field-form/Type"] = new() { ["SingleLineText"] = 0, ["ParagraphText"] = 1, ["DropdownList"] = 2 },
+            ["text-custom-field-form/Size"] = new() { ["Small"] = 0, ["Medium"] = 1, ["Large"] = 2 },
+            ["tax-code-form/TaxRate"] = new() { ["ZeroRate"] = 0, ["TotalRate"] = 1, ["CustomRate"] = 2 },
+            ["tax-code-form/Type"] = new() { ["SingleRate"] = 0, ["MultipleRates"] = 1 },
+            ["inventory-item-form/ValuationMethod"] = new() { ["FirstInFirstOut"] = 0, ["WeightedAverageCost"] = 1, ["Manual"] = 2 },
+        };
+
+        private static readonly Dictionary<string, string> Api3FormNames = new()
+        {
+            ["theme-form"] = "custom-theme-form",
+        };
+
+        /// <summary>
+        /// The same records as <see cref="Build"/>, as the requests the extension page sends through
+        /// Manager's API bridge: PUT /api3/{form}/{key} with camelCase bodies.
+        /// </summary>
+        public static List<ManagerApiCall> BuildApiCalls(Device? device)
+        {
+            var calls = new List<ManagerApiCall>();
+
+            foreach (var form in Build(device).Properties())
+            {
+                if (form.Value is not JArray items) continue;
+                string formName = Api3FormNames.GetValueOrDefault(form.Name, form.Name);
+
+                foreach (var item in items.OfType<JObject>())
+                {
+                    string? key = (string?)item["Key"];
+                    if (string.IsNullOrEmpty(key)) continue;
+
+                    var body = (JObject)item.DeepClone();
+                    body.Remove("Key");
+                    foreach (var property in body.Properties().ToList())
+                    {
+                        if (property.Value.Type == JTokenType.String &&
+                            EnumValues.TryGetValue($"{form.Name}/{property.Name}", out var map) &&
+                            map.TryGetValue((string)property.Value!, out int number))
+                        {
+                            property.Value = number;
+                        }
+                    }
+
+                    calls.Add(new ManagerApiCall
+                    {
+                        Method = "PUT",
+                        ApiUrl = $"/api3/{formName}/{key}",
+                        Body = ManagerApiJson.ToApiShape(body),
+                    });
+                }
+            }
+
+            return calls;
+        }
+
         private static JObject TaxCode(Tax tax)
         {
             return new JObject

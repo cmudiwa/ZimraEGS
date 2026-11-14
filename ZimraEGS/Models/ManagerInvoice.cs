@@ -1,9 +1,9 @@
-﻿namespace ZimraEGS.Models
+namespace ZimraEGS.Models
 {
     public class ManagerInvoice
     {
-        public DateTimeOffset IssueDate { get; set; }
-        public DateTimeOffset DueDateDate { get; set; }
+        public DateTimeOffset? IssueDate { get; set; }
+        public DateTimeOffset? DueDateDate { get; set; }
         public string Reference { get; set; }
         public RefInvoice RefInvoice { get; set; }
         public decimal ExchangeRate { get; set; } = 1;
@@ -38,9 +38,9 @@
     public class CustomFields2
     {
         public Dictionary<string, string> Strings { get; set; } = [];
-        public Dictionary<string, decimal> Decimals { get; set; } = [];
+        public Dictionary<string, decimal?> Decimals { get; set; } = [];
         public Dictionary<string, DateTime?> Dates { get; set; } = [];
-        public Dictionary<string, bool> Booleans { get; set; } = [];
+        public Dictionary<string, bool?> Booleans { get; set; } = [];
         public Dictionary<string, List<string>> StringArrays { get; set; } = [];
     }
 
@@ -52,6 +52,6 @@
     public class RefInvoice
     {
         public string Reference { get; set; }
-        public DateTime IssueDate { get; set; }
+        public DateTime? IssueDate { get; set; }
     }
 }

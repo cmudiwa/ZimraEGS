@@ -180,6 +180,38 @@ namespace ZimraEGS.Services
             }
         }
 
+        /// <summary>Fetches the device configuration from ZIMRA now. Returns false when ZIMRA could not be reached.</summary>
+        public async Task<bool> RefreshConfigAsync(int deviceRowId)
+        {
+            using var deviceLock = await _locks.AcquireAsync(deviceRowId);
+            var device = await _db.Devices.FirstAsync(d => d.Id == deviceRowId);
+            using var client = CreateClient(device);
+            var before = device.ConfigFetchedUtc;
+            await EnsureConfigAsync(device, client, force: true);
+            return device.ConfigFetchedUtc != before;
+        }
+
+        /// <summary>
+        /// Builds the receipt for a document without numbering, signing or sending it, so problems can be
+        /// shown before the user commits. Nothing in the receipt chain changes.
+        /// </summary>
+        public async Task<ReceiptDraft> PreviewAsync(int deviceRowId, RelayData relay)
+        {
+            var device = await _db.Devices.FirstAsync(d => d.Id == deviceRowId);
+
+            if (DeviceStore.GetConfig(device) == null)
+            {
+                using var deviceLock = await _locks.AcquireAsync(deviceRowId);
+                using var client = CreateClient(device);
+                await EnsureConfigAsync(device, client, force: false);
+            }
+
+            var info = DeviceStore.GetInfo(device);
+            var config = DeviceStore.GetConfig(device);
+            return ReceiptBuilder.Build(relay, config, !string.IsNullOrWhiteSpace(config?.VatNumber ?? info.VatNumber),
+                device.DefaultMoneyType is { } m && Enum.IsDefined(typeof(MoneyType), m) ? (MoneyType)m : null);
+        }
+
         private FiscalReceipt PrepareReceipt(Device device, RelayData relay, Receipt receipt, GetStatusResponse status, string? qrUrl)
         {
             var now = TimeZoneHelper.GetSouthAfricaTime();

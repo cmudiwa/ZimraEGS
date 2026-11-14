@@ -12,6 +12,10 @@ namespace ZimraEGS.Services
     {
         public string ApiUrl { get; set; } = string.Empty;
         public string Payload { get; set; } = string.Empty;
+
+        // Used by the extension page, which sends requests through Manager's own API bridge.
+        public string Method { get; set; } = "PUT";
+        public Newtonsoft.Json.Linq.JObject? Body { get; set; }
     }
 
     /// <summary>
@@ -68,6 +72,95 @@ namespace ZimraEGS.Services
             }
 
             return new ManagerApiCall { ApiUrl = Utils.ConstructInvoiceApiUrl(relay.Referrer, relay.FormKey), Payload = json };
+        }
+
+        /// <summary>
+        /// The same invoice update for Manager's current API: a PATCH that only carries the changed fields,
+        /// which Manager merges into the document.
+        /// </summary>
+        public static ManagerApiCall InvoicePatch(Device device, FiscalReceipt row)
+        {
+            var receiptDate = TimeZoneHelper.ParseFdmsString(row.ReceiptDate) ?? TimeZoneHelper.GetSouthAfricaTime();
+
+            Newtonsoft.Json.Linq.JToken? submitResponse = null;
+            if (!string.IsNullOrEmpty(row.ResponseJson))
+            {
+                try { submitResponse = Newtonsoft.Json.Linq.JToken.Parse(row.ResponseJson); }
+                catch (JsonException) { }
+            }
+
+            var reference = new Newtonsoft.Json.Linq.JObject
+            {
+                ["ApprovalStatus"] = row.Status,
+                ["ReceiptHash"] = row.Hash,
+                ["ReceiptSignature"] = row.Signature,
+                ["SubmitReceiptResponse"] = submitResponse,
+            };
+
+            var strings = new Newtonsoft.Json.Linq.JObject
+            {
+                [ManagerCustomField.ApprovalStatusGuid] = row.Status,
+                [ManagerCustomField.ReceiptDateGuid] = receiptDate.ToString("yyyy-MM-dd HH:mm:ss"),
+                [ManagerCustomField.ServerResponseGuid] = reference.ToString(Formatting.Indented),
+                [ManagerCustomField.ReceiptQRCodeGuid] = row.QrCode,
+                [ManagerCustomField.VerificationCodeGuid] = row.VerificationCode,
+                [ManagerCustomField.DeviceSNGuid] = device.SerialNumber,
+            };
+            var decimals = new Newtonsoft.Json.Linq.JObject
+            {
+                [ManagerCustomField.DeviceIDGuid] = device.DeviceID,
+                [ManagerCustomField.FiscalDayNoGuid] = row.FiscalDayNo,
+                [ManagerCustomField.ReceiptGlobalNoGuid] = row.ReceiptGlobalNo,
+                [ManagerCustomField.ReceiptCounterGuid] = row.ReceiptCounter,
+            };
+
+            bool isInvoice = row.ReceiptType == ReceiptType.FiscalInvoice;
+            if (!isInvoice && !string.IsNullOrEmpty(row.RefJson))
+            {
+                var r = JsonConvert.DeserializeObject<ReceiptReferenceInfo>(row.RefJson)!;
+                decimals[ManagerCustomField.DeviceIDRefGuid] = r.DeviceIDRef;
+                decimals[ManagerCustomField.FiscalDayNoRefGuid] = r.FiscalDayNoRef;
+                decimals[ManagerCustomField.ReceiptGlobalNoRefGuid] = r.ReceiptGlobalNoRef;
+                decimals[ManagerCustomField.ReceiptCounterRefGuid] = r.ReceiptCounterRef;
+                if (r.DeviceSNRef != null) strings[ManagerCustomField.DeviceSNRefGuid] = r.DeviceSNRef;
+                if (r.ReceiptRefNo != null) strings[ManagerCustomField.ReceiptNoRefGuid] = r.ReceiptRefNo;
+                if (r.ReceiptRefDate != null) strings[ManagerCustomField.ReceiptRefDateGuid] = r.ReceiptRefDate;
+            }
+
+            return new ManagerApiCall
+            {
+                Method = "PATCH",
+                ApiUrl = $"/api3/{(isInvoice ? "sales-invoice-form" : "credit-note-form")}/{row.FormKey}",
+                Body = new Newtonsoft.Json.Linq.JObject
+                {
+                    ["issueDate"] = receiptDate.ToString("yyyy-MM-dd") + "T00:00:00",
+                    ["reference"] = row.InvoiceNo,
+                    ["customFields2"] = new Newtonsoft.Json.Linq.JObject { ["strings"] = strings, ["decimals"] = decimals },
+                },
+            };
+        }
+
+        /// <summary>Stores the device link in the business details through Manager's current API.</summary>
+        public static ManagerApiCall BusinessLinkPatch(string deviceLink, string? name = null, string? address = null)
+        {
+            var body = new Newtonsoft.Json.Linq.JObject
+            {
+                ["customFields2"] = new Newtonsoft.Json.Linq.JObject
+                {
+                    ["strings"] = new Newtonsoft.Json.Linq.JObject
+                    {
+                        [ManagerCustomField.CertificateInfoGuid] = deviceLink,
+                        [ManagerCustomField.AppVersionGuid] = VersionHelper.GetVersion(),
+                        // A null removes the value: these held device state before it moved to the server.
+                        [ManagerCustomField.BusinessReferenceGuid] = null,
+                        [ManagerCustomField.FiscalDaySummaryGuid] = null,
+                    }
+                }
+            };
+            if (!string.IsNullOrWhiteSpace(name)) body["name"] = name;
+            if (!string.IsNullOrWhiteSpace(address)) body["address"] = address;
+
+            return new ManagerApiCall { Method = "PATCH", ApiUrl = "/api3/business-details-form", Body = body };
         }
 
         /// <summary>

@@ -118,24 +118,29 @@ namespace ZimraEGS.Services
                 problems.Add("The customer needs both a Registered Name and a TIN. Complete the customer's details or remove both.");
             }
 
+            // ZIMRA rejects a contact block without an email or phone number, and an address block is only
+            // meaningful with content, so blocks with nothing in them are left out altogether.
+            bool hasContacts = !string.IsNullOrWhiteSpace(relay.BuyerEmail) || !string.IsNullOrWhiteSpace(relay.BuyerPhoneNo);
+            bool hasAddress = new[] { relay.BuyerProvince, relay.BuyerCity, relay.BuyerStreet, relay.BuyerHouseNo }.Any(x => !string.IsNullOrWhiteSpace(x));
+
             return new Buyer
             {
                 BuyerRegisterName = relay.BuyerRegisterName,
                 BuyerTradeName = NullIfEmpty(relay.BuyerTradeName)!,
                 BuyerTIN = relay.BuyerTIN,
                 VatNumber = NullIfEmpty(relay.BuyerVatNumber)!,
-                BuyerContacts = new Contacts
+                BuyerContacts = hasContacts ? new Contacts
                 {
                     Email = NullIfEmpty(relay.BuyerEmail)!,
                     PhoneNo = NullIfEmpty(relay.BuyerPhoneNo)!,
-                },
-                BuyerAddress = new AddressDto
+                } : null!,
+                BuyerAddress = hasAddress ? new AddressDto
                 {
                     Province = relay.BuyerProvince ?? string.Empty,
                     City = relay.BuyerCity ?? string.Empty,
                     Street = relay.BuyerStreet ?? string.Empty,
                     HouseNo = relay.BuyerHouseNo ?? string.Empty,
-                },
+                } : null!,
             };
         }
 

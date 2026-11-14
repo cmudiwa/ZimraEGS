@@ -181,6 +181,9 @@ public class FiscalFlowTests : IDisposable
 
         var sent = Assert.Single(_fdms.AllReceipts);
         Assert.Equal("Buyer Ltd", sent.BuyerData.BuyerRegisterName);
+        // Empty contact and address blocks are left out; ZIMRA rejects a contact block with nothing in it.
+        Assert.Null(sent.BuyerData.BuyerContacts);
+        Assert.Null(sent.BuyerData.BuyerAddress);
         Assert.Equal(3, sent.ReceiptLines.Single().TaxID);
 
         // What the browser writes back into Manager.
@@ -484,6 +487,121 @@ public class FiscalFlowTests : IDisposable
         var viaLink = await RelayAsync(RelayForm(link, Guid.NewGuid().ToString(), SimpleLines()));
         Assert.True(viaLink.result.Success);
         Assert.Equal(device.Id, viaLink.device.Id);
+    }
+
+    /// <summary>A document as the extension page sends it: read from Manager's API with references filled in.</summary>
+    private static JObject ApiInvoice(JArray lines, bool discount = false, int discountType = 0, bool withBuyer = true, JObject? strings = null)
+    {
+        return new JObject
+        {
+            ["issueDate"] = "2026-11-13T00:00:00", ["dueDate"] = 0, ["dueDateDays"] = null, ["dueDateDate"] = null, ["reference"] = null,
+            ["customer"] = new JObject
+            {
+                ["name"] = "Buyer", ["currency"] = null,
+                ["customFields2"] = withBuyer
+                    ? new JObject { ["strings"] = new JObject { [ManagerCustomField.BuyerRegisterNameGuid] = "Buyer Ltd", [ManagerCustomField.BuyerTINGuid] = "2000000001" }, ["decimals"] = null }
+                    : null
+            },
+            ["lines"] = lines, ["discount"] = discount, ["discountType"] = discountType, ["amountsIncludeTax"] = false,
+            ["customFields"] = null,
+            ["customFields2"] = new JObject { ["strings"] = strings ?? new JObject { [ManagerCustomField.PaymentType1Guid] = "0 | Cash" }, ["decimals"] = new JObject(), ["dates"] = null }
+        };
+    }
+
+    private static JObject ApiLine(string name, decimal? qty, decimal price, int taxId, decimal rate, decimal discountPercentage = 0, decimal discountAmount = 0)
+    {
+        return new JObject
+        {
+            ["item"] = new JObject { ["itemName"] = name, ["customFields2"] = new JObject { ["strings"] = new JObject { [ManagerCustomField.HsCodeGuid] = "12345678" } } },
+            ["account"] = null, ["lineDescription"] = null, ["customFields2"] = null,
+            ["qty"] = qty, ["salesUnitPrice"] = price, ["discountPercentage"] = discountPercentage, ["discountAmount"] = discountAmount,
+            // Manager: taxRate 2 = custom rate, type 0 = single rate.
+            ["taxCode"] = new JObject { ["name"] = $"Tax — {taxId}", ["taxRate"] = 2, ["type"] = 0, ["rate"] = rate, ["components"] = null }
+        };
+    }
+
+    [Fact]
+    public async Task Document_read_through_the_manager_extension_is_fiscalised_and_patched_back()
+    {
+        string link = await RegisterDeviceAsync();
+        var business = new JObject { ["name"] = "Demo", ["customFields2"] = new JObject { ["strings"] = new JObject { [ManagerCustomField.CertificateInfoGuid] = link } } };
+        string key = Guid.NewGuid().ToString();
+
+        var document = ApiInvoice(
+        [
+            ApiLine("Widget", 4, 25m, 3, 15, discountPercentage: 10),   // 100 less 10% = 90, plus 15% tax
+            ApiLine("Delivery", null, 8m, 2, 0),                        // an empty quantity means one
+        ], discount: true, discountType: 0);
+
+        var (service, store, _) = Scope();
+        var relay = RelayData.FromExtension("/sales-invoice-view", key, document, business, "USD");
+        var device = await store.ResolveAsync(relay);
+        Assert.NotNull(device);
+
+        Assert.Empty((await service.PreviewAsync(device!.Id, relay)).Problems);
+        Assert.Equal(0, _fdms.SubmitCalls);
+
+        var result = await service.FiscaliseAsync(device.Id, relay);
+
+        Assert.True(result.Success, string.Join("; ", result.Problems));
+        Assert.Empty(_fdms.Violations);
+        var sent = Assert.Single(_fdms.AllReceipts);
+        Assert.Equal("USD", sent.ReceiptCurrency);
+        Assert.Equal(111.50m, sent.ReceiptTotal);
+        Assert.Equal(3, sent.ReceiptLines.Count);   // two sales lines and one discount line
+        Assert.Equal(1m, sent.ReceiptLines.ElementAt(1).ReceiptLineQuantity);
+        Assert.Equal(-10m, sent.ReceiptLines.ElementAt(2).ReceiptLineTotal);
+
+        // What the page sends back to Manager: a merge patch with only the changed fields.
+        var patch = ManagerWriteBack.InvoicePatch(device, result.Receipt!);
+        Assert.Equal("PATCH", patch.Method);
+        Assert.Equal($"/api3/sales-invoice-form/{key}", patch.ApiUrl);
+        Assert.Equal("0001-0001", (string?)patch.Body!["reference"]);
+        Assert.Equal("APPROVED", (string?)patch.Body["customFields2"]!["strings"]![ManagerCustomField.ApprovalStatusGuid]);
+        Assert.Equal(1, (int)patch.Body["customFields2"]!["decimals"]![ManagerCustomField.ReceiptGlobalNoGuid]!);
+
+        // A credit note against that invoice, with the original read back as Manager now holds it.
+        var original = (JObject)document.DeepClone();
+        original.Merge(patch.Body);
+        var note = ApiInvoice([ApiLine("Widget", 1, 25m, 3, 15)],
+            strings: new JObject { [ManagerCustomField.PaymentType1Guid] = "0 | Cash", [ManagerCustomField.ReceiptNotesGuid] = "Returned" });
+        note["salesInvoice"] = original;
+
+        var credit = await service.FiscaliseAsync(device.Id, RelayData.FromExtension("/credit-note-view", Guid.NewGuid().ToString(), note, business, "USD"));
+
+        Assert.True(credit.Success, string.Join("; ", credit.Problems));
+        Assert.Equal(ReceiptType.CreditNote, _fdms.AllReceipts[1].ReceiptType);
+        Assert.Equal(-28.75m, _fdms.AllReceipts[1].ReceiptTotal);
+        Assert.Equal(1, _fdms.AllReceipts[1].CreditDebitNote.ReceiptGlobalNo);
+        Assert.StartsWith("/api3/credit-note-form/", ManagerWriteBack.InvoicePatch(device, credit.Receipt!).ApiUrl);
+        Assert.Empty(_fdms.Violations);
+    }
+
+    [Fact]
+    public async Task Setup_records_use_the_names_and_numbers_of_managers_api()
+    {
+        string link = await RegisterDeviceAsync();
+        await RelayAsync(RelayForm(link, Guid.NewGuid().ToString(), SimpleLines()));
+
+        var (_, store, _) = Scope();
+        var calls = ManagerSetupData.BuildApiCalls((await store.FindByLinkAsync(link))!);
+
+        var taxCode = calls.Single(c => c.ApiUrl == $"/api3/tax-code-form/{ManagerSetupData.TaxCodeKey(3)}");
+        Assert.Equal("PUT", taxCode.Method);
+        Assert.Equal("Standard rated 15% — 3", (string?)taxCode.Body!["name"]);
+        Assert.Equal(2, (int)taxCode.Body["taxRate"]!);     // custom rate
+        Assert.Equal(0, (int)taxCode.Body["type"]!);        // single rate
+
+        var paymentType = calls.Single(c => c.ApiUrl.EndsWith(ManagerCustomField.PaymentType1Guid));
+        Assert.StartsWith("/api3/text-custom-field-form/", paymentType.ApiUrl);
+        Assert.Equal(2, (int)paymentType.Body!["type"]!);   // dropdown list
+        Assert.Contains("0 | Cash", (string?)paymentType.Body["optionsForDropdownList"]);
+        Assert.Null(paymentType.Body["Name"]);
+
+        Assert.Contains(calls, c => c.ApiUrl.StartsWith("/api3/custom-theme-form/"));
+
+        var businessPatch = ManagerWriteBack.BusinessLinkPatch(link, "Demo", "Address");
+        Assert.Equal(link, (string?)businessPatch.Body!["customFields2"]!["strings"]![ManagerCustomField.CertificateInfoGuid]);
     }
 
     [Fact]

@@ -176,6 +176,9 @@ namespace ZimraEGS.Controllers
                     TaxPayerName = info.TaxPayerName,
                     Business = ManagerWriteBack.BusinessLink(request.Api ?? string.Empty, businessDetails, deviceLink),
                     Records = ManagerSetupData.Build(device),
+                    // For the extension page, which writes through Manager's API bridge.
+                    ApiCalls = ManagerSetupData.BuildApiCalls(device)
+                        .Append(ManagerWriteBack.BusinessLinkPatch(deviceLink, info.TaxPayerName, info.ToBusinessAddress())),
                 };
                 return Content(JsonConvert.SerializeObject(payload), "application/json");
             }

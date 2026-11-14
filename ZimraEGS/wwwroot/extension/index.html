@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ZIMRA fiscalisation</title>
+    <style>
+        :root {
+            --bg: #f6f7f9; --card: #ffffff; --text: #1d2430; --muted: #667085; --line: #e3e6ea;
+            --primary: #0b6bcb; --primary-text: #ffffff; --ok: #177245; --ok-bg: #e7f5ee;
+            --warn: #8a5300; --warn-bg: #fdf3dc; --bad: #b3261e; --bad-bg: #fbe9e7;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #14171c; --card: #1d2229; --text: #e7eaee; --muted: #9aa4b2; --line: #2e353f;
+                --primary: #4c9bf0; --primary-text: #0b1220; --ok: #6fd3a0; --ok-bg: #15382a;
+                --warn: #f2c26b; --warn-bg: #3d2f12; --bad: #f2948c; --bad-bg: #44201d;
+            }
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+        main { max-width: 640px; margin: 0 auto; padding: 24px 16px 40px; }
+        h1 { font-size: 20px; margin: 0 0 4px; }
+        .sub { color: var(--muted); margin: 0 0 16px; }
+        .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 18px; margin-bottom: 14px; }
+        .note { border-radius: 8px; padding: 10px 12px; margin: 0 0 12px; }
+        .note.ok { background: var(--ok-bg); color: var(--ok); }
+        .note.warn { background: var(--warn-bg); color: var(--warn); }
+        .note.bad { background: var(--bad-bg); color: var(--bad); }
+        .note.info { background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 6px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+        th { font-weight: 500; color: var(--muted); width: 45%; }
+        tr:last-child th, tr:last-child td { border-bottom: 0; }
+        ul { margin: 0 0 12px; padding-left: 20px; }
+        li { margin-bottom: 6px; }
+        label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+        input, select { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--card); color: var(--text); font: inherit; }
+        input:disabled, select:disabled { opacity: .65; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        @media (max-width: 480px) { .grid { grid-template-columns: 1fr; } }
+        .full { grid-column: 1 / -1; }
+        .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-top: 14px; }
+        button { font: inherit; padding: 9px 16px; border-radius: 7px; border: 1px solid var(--line); background: var(--card); color: var(--text); cursor: pointer; }
+        button.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-text); font-weight: 600; }
+        button.danger { color: var(--bad); border-color: var(--bad); }
+        button:disabled { opacity: .55; cursor: default; }
+        .qr { background: #fff; padding: 8px; border-radius: 8px; display: inline-block; line-height: 0; }
+        .mono { font-family: ui-monospace, Consolas, monospace; font-size: 13px; overflow-wrap: anywhere; }
+        .split { display: flex; gap: 16px; align-items: flex-start; }
+        .split > :first-child { flex: 1; min-width: 0; }
+        .small { font-size: 13px; color: var(--muted); }
+        details { margin-top: 12px; }
+        summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+        .steps { list-style: none; padding: 0; margin: 12px 0 0; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>ZIMRA fiscalisation</h1>
+        <p class="sub" id="subtitle">Loading…</p>
+        <div id="view"></div>
+    </main>
+    <script src="/js/qrcode.js"></script>
+    <script src="/extension/app.js"></script>
+</body>
+</html>

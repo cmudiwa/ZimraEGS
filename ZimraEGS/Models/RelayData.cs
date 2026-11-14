@@ -95,11 +95,49 @@ namespace ZimraEGS.Models
             {
                 throw new InvalidOperationException("The relayed data does not contain the invoice. Relay from the invoice or credit note view screen.");
             }
-            ManagerInvoice = JsonConvert.DeserializeObject<ManagerInvoice>(mergedJson);
+            ManagerInvoice = JsonConvert.DeserializeObject<ManagerInvoice>(mergedJson, TolerantJson);
 
             InitializeInvoiceData(mergedJson);
 
             DetermineInvoiceType(mergedJson);
+        }
+
+        private static readonly JsonSerializerSettings TolerantJson = new()
+        {
+            NullValueHandling = NullValueHandling.Ignore,
+            MissingMemberHandling = MissingMemberHandling.Ignore,
+        };
+
+        /// <summary>
+        /// Builds the same data from what the Manager extension page collected through Manager's API:
+        /// the document with its customer, items, tax codes and (for a credit note) original invoice filled in.
+        /// </summary>
+        /// <param name="viewPath">Manager page the extension was opened on, e.g. "/sales-invoice-view".</param>
+        public static RelayData FromExtension(string viewPath, string key, Newtonsoft.Json.Linq.JObject document,
+            Newtonsoft.Json.Linq.JObject? businessDetails, string? baseCurrencyCode)
+        {
+            var relay = new RelayData
+            {
+                // The view path plays the role the Referrer had: it tells an invoice from a credit note.
+                Referrer = "manager://extension" + (viewPath ?? string.Empty),
+                FormKey = key ?? string.Empty,
+            };
+
+            relay.BusinessDetailJson = ManagerApiJson.ToRelayShape(businessDetails ?? new Newtonsoft.Json.Linq.JObject()).ToString();
+            relay.InitializeBusinessData(relay.BusinessDetailJson);
+
+            string merged = ManagerApiJson.ToRelayDocument(document).ToString();
+            relay.InvoiceJson = merged;
+            relay.ManagerInvoice = JsonConvert.DeserializeObject<ManagerInvoice>(merged, TolerantJson);
+
+            relay.InitializeInvoiceData(merged);
+            if (!string.IsNullOrWhiteSpace(baseCurrencyCode) && RelayDataHelper.FindStringValueInJson(merged, "Code", "Currency") == null)
+            {
+                relay.CurrencyCode = baseCurrencyCode.Trim().ToUpperInvariant();
+            }
+
+            relay.DetermineInvoiceType(merged);
+            return relay;
         }
         private void InitializeBusinessData(string jsonBusiness)
         {
