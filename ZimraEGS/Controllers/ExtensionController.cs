@@ -85,6 +85,19 @@ namespace ZimraEGS.Controllers
                 context.Calls.Add(ManagerWriteBack.BusinessLinkPatch(context.DeviceLink));
             }
 
+            // Set up by an earlier version: update the custom fields and the invoice theme in Manager once.
+            string? marker = RelayDataHelper.GetStringCustomField2Value(context.Relay.BusinessDetailJson, ManagerCustomField.AppVersionGuid);
+            if (!ManagerSetupData.IsCurrent(marker))
+            {
+                context.Calls.AddRange(ManagerSetupData.BuildUpgradeCalls(context.Device));
+
+                // Earlier versions saved the seller address as HTML, which Manager now prints as text.
+                string? address = (string?)(body["business"] as JObject)?["address"];
+                bool htmlAddress = address != null && address.Contains("<div", StringComparison.OrdinalIgnoreCase);
+                context.Calls.Add(ManagerWriteBack.BusinessLinkPatch(context.DeviceLink, null,
+                    htmlAddress || string.IsNullOrWhiteSpace(address) ? DeviceStore.GetInfo(context.Device).ToBusinessAddress() : null));
+            }
+
             return context;
         }
 

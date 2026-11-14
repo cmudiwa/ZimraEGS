@@ -80,9 +80,10 @@ You can also choose a **default payment type** (for example Cash, or Credit for 
 
 ### 4. Fiscalising Invoices
 1. Set the base currency (Settings - Currencies - Base Currency) to `ZWG` or `USD`.
-2. In the invoice form settings, tick **Custom Theme** and choose `ZimTheme`.
-3. Create the invoice with the tax codes created by setup. VAT registered taxpayers need an **HS Code** on each line or on the inventory item.
-4. Open the invoice and click **ZIMRA**. The panel shows the type, customer, tax and total. Click **Send to ZIMRA**. You return to the invoice with its QR code.
+2. Create the invoice with the tax codes created by setup. VAT registered taxpayers need an **HS Code** on each line or on the inventory item.
+3. Open the invoice and click **ZIMRA**. The panel shows the type, customer, tax and total. Click **Send to ZIMRA**. You return to the invoice, which now prints in ZIMRA's layout with its QR code.
+
+Fiscalised documents are switched to the `ZimTheme` theme automatically. It follows the A4 invoice layout of ZIMRA's API specification: verification code and QR code, the title ZIMRA prescribes (FISCAL TAX INVOICE, FISCAL INVOICE, CREDIT NOTE or DEBIT NOTE), seller and buyer, receipt numbers, fiscal day and device, and for a credit or debit note the details of the original invoice. A document that has not been sent is marked NOT FISCALISED.
 
 Payment is optional on the invoice:
 - nothing entered: the device's default payment type is used for the full total;

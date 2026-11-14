@@ -208,7 +208,7 @@ public class FiscalFlowTests : IDisposable
             new("Widget", 3, 19.99m, TaxStandard, 15, Discount: 5m),
             new("Gadget", 1, 0.07m, TaxStandard, 15),
             new("Bread", 4, 1.25m, TaxZero, 0),
-            new("Exempt service", 1, 10m, null, 0),
+            new("Exempt service", 1, 10m, "Exempt — 1", 0),
         ], paymentType: "1 - Card"));
         var third = await RelayAsync(RelayForm(link, Guid.NewGuid().ToString(), SimpleLines(), withBuyer: false));
 
@@ -318,6 +318,10 @@ public class FiscalFlowTests : IDisposable
         Assert.Contains("must have 4 or 8 digits", string.Join(" ", badLength.result.Problems));
         Assert.Contains("8-digit HS Code", string.Join(" ", shortOnZero.result.Problems));
         Assert.Contains("14.5%", string.Join(" ", wrongRate.result.Problems));
+
+        // A VAT payer's line without a tax code is not silently treated as exempt.
+        var noTaxCode = await RelayAsync(RelayForm(link, Guid.NewGuid().ToString(), [new("Widget", 1, 10m, null, 0)]));
+        Assert.Contains("has no tax code", string.Join(" ", noTaxCode.result.Problems));
         Assert.Equal(0, _fdms.SubmitCalls);
 
         // Nothing was numbered: the first good invoice is still receipt 1.
@@ -496,6 +500,12 @@ public class FiscalFlowTests : IDisposable
         Assert.Equal(device.Id, viaLink.device.Id);
     }
 
+    private static CertificateInfo LegacyCertificateInfoForAddress() => new()
+    {
+        DeviceBranchName = "Main", TaxPayerTIN = "1234567890", VatNumber = "123456789",
+        HouseNo = "1", Street = "First", City = "Harare", Province = "Harare", Email = "a@b.co", PhoneNo = "077",
+    };
+
     /// <summary>A document as the extension page sends it: read from Manager's API with references filled in.</summary>
     private static JObject ApiInvoice(JArray lines, bool discount = false, int discountType = 0, bool withBuyer = true, JObject? strings = null)
     {
@@ -562,6 +572,9 @@ public class FiscalFlowTests : IDisposable
         // What the page sends back to Manager: a merge patch with only the changed fields.
         var patch = ManagerWriteBack.InvoicePatch(device, result.Receipt!);
         Assert.Equal("PATCH", patch.Method);
+        Assert.True((bool)patch.Body!["customTheme"]!);
+        Assert.Equal(ManagerSetupData.ThemeKey, (string?)patch.Body["customThemeId"]);
+        Assert.Equal("FISCAL TAX INVOICE", (string?)patch.Body["customFields2"]!["strings"]![ManagerCustomField.FiscalDocumentGuid]);
         Assert.Equal($"/api3/sales-invoice-form/{key}", patch.ApiUrl);
         Assert.Equal("12345-0001-0001", (string?)patch.Body!["reference"]);
         Assert.Equal("APPROVED", (string?)patch.Body["customFields2"]!["strings"]![ManagerCustomField.ApprovalStatusGuid]);
@@ -581,6 +594,7 @@ public class FiscalFlowTests : IDisposable
         Assert.Equal(-28.75m, _fdms.AllReceipts[1].ReceiptTotal);
         Assert.Equal(1, _fdms.AllReceipts[1].CreditDebitNote.ReceiptGlobalNo);
         Assert.StartsWith("/api3/credit-note-form/", ManagerWriteBack.InvoicePatch(device, credit.Receipt!).ApiUrl);
+        Assert.Equal("CREDIT NOTE", (string?)ManagerWriteBack.InvoicePatch(device, credit.Receipt!).Body!["customFields2"]!["strings"]![ManagerCustomField.FiscalDocumentGuid]);
         Assert.Empty(_fdms.Violations);
     }
 
@@ -605,7 +619,21 @@ public class FiscalFlowTests : IDisposable
         Assert.Contains("0 | Cash", (string?)paymentType.Body["optionsForDropdownList"]);
         Assert.Null(paymentType.Body["Name"]);
 
-        Assert.Contains(calls, c => c.ApiUrl.StartsWith("/api3/custom-theme-form/"));
+        // The theme is a complete HTML page in ZIMRA's layout, and fiscalised documents are switched to it.
+        var theme = calls.Single(c => c.ApiUrl == $"/api3/custom-theme-form/{ManagerSetupData.ThemeKey}");
+        Assert.StartsWith("<!DOCTYPE html>", (string?)theme.Body!["template"]);
+        Assert.Contains("FISCAL TAX INVOICE", (string?)theme.Body["template"]);
+
+        // The device link is a secret: its field must not be shown on views or printed documents.
+        var linkField = calls.Single(c => c.ApiUrl.EndsWith(ManagerCustomField.CertificateInfoGuid));
+        Assert.False((bool)linkField.Body!["displayOnView"]!);
+
+        // Sample items point at tax codes that exist for the device.
+        var keys = calls.Where(c => c.ApiUrl.StartsWith("/api3/tax-code-form/")).Select(c => c.ApiUrl.Split('/').Last()).ToList();
+        Assert.All(calls.Where(c => c.ApiUrl.StartsWith("/api3/inventory-item-form/")), c => Assert.Contains((string?)c.Body!["defaultTaxCode"], keys));
+
+        var info = LegacyCertificateInfoForAddress();
+        Assert.Equal("Main\nTIN: 1234567890   VAT No: 123456789\n1, First, Harare\na@b.co\n077", info.ToBusinessAddress());
 
         var businessPatch = ManagerWriteBack.BusinessLinkPatch(link, "Demo", "Address");
         Assert.Equal(link, (string?)businessPatch.Body!["customFields2"]!["strings"]![ManagerCustomField.CertificateInfoGuid]);

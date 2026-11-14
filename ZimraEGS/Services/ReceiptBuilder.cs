@@ -159,7 +159,7 @@ namespace ZimraEGS.Services
         /// Works out the ZIMRA tax for a Manager line. Tax codes named "Name — taxID — ..." carry the ID
         /// directly; otherwise the tax is matched on its rate against the taxes ZIMRA configured for the device.
         /// </summary>
-        private static (int taxID, decimal? taxPercent) ResolveTax(Line line, List<Tax> applicableTaxes, string lineLabel, List<string> problems)
+        private static (int taxID, decimal? taxPercent) ResolveTax(Line line, List<Tax> applicableTaxes, string lineLabel, List<string> problems, bool sellerIsVatRegistered = false)
         {
             decimal rate = line.TaxCode?.Rate ?? 0;
             int? taxID = null;
@@ -180,9 +180,18 @@ namespace ZimraEGS.Services
                 return (id, id == 1 ? null : rate);
             }
 
+            if (taxID == null && line.TaxCode == null && applicableTaxes.Count != 1 && sellerIsVatRegistered)
+            {
+                // Guessing "exempt" for a VAT payer would under-report tax without anyone noticing.
+                problems.Add($"{lineLabel}: has no tax code. Choose the tax code that applies; use the Exempt code if the item is exempt.");
+                return (0, null);
+            }
+
             if (taxID == null)
             {
-                List<Tax> candidates = line.TaxCode == null
+                List<Tax> candidates = applicableTaxes.Count == 1 && line.TaxCode == null
+                    ? applicableTaxes
+                    : line.TaxCode == null
                     ? applicableTaxes.Where(t => t.TaxPercent == null).ToList()
                     : applicableTaxes.Where(t => t.TaxPercent == rate).ToList();
 
@@ -259,7 +268,7 @@ namespace ZimraEGS.Services
                     name = name[..200];
                 }
 
-                var (taxID, taxPercent) = ResolveTax(line, applicableTaxes, $"{label} ({name})", problems);
+                var (taxID, taxPercent) = ResolveTax(line, applicableTaxes, $"{label} ({name})", problems, sellerIsVatRegistered);
 
                 // ZIMRA: a VAT payer must send an HS code. It has 4 or 8 digits, and exactly 8 for a VAT payer's
                 // zero-rated or exempt line. The code is sent as entered; padding it would change its meaning.

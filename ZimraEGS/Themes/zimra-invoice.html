@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<!-- ZimTheme: fiscal tax invoice, credit note and debit note in the layout of ZIMRA's
+     Fiscal Device Gateway API specification (InvoiceA4 view). Installed by ZimraEGS. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Invoice</title>
+<style>
+:root { --bg: #f5f5f5; --paper: #fff; --ink: #111; --muted: #555; --line: #c9c9c9; }
+/* The page is shown in a frame whose surroundings use the same background. */
+body { background-color: var(--bg); display: flex; margin: 0; padding: 0; }
+main { background-color: var(--paper); color: var(--ink); margin: 1rem 1.5rem; border: 1px solid #e5e5e5; border-radius: 5px;
+       box-shadow: 0px 4px 6px rgb(0 0 0 / 0.05); padding: 2rem; min-width: 80ch; max-width: 190mm;
+       font: 12px/1.45 Arial, Helvetica, sans-serif; }
+@media (prefers-color-scheme: dark) { :root { --bg: #292524; } main { border-color: #0c0a09; } }
+@page { size: A4; margin: 10mm; }
+@media print {
+  body { background-color: initial; display: initial; }
+  main { padding: 0; border: initial; box-shadow: initial; border-radius: initial; margin: 0; min-width: initial; max-width: initial; }
+  .screen-only { display: none !important; }
+}
+.top { display: flex; align-items: flex-start; gap: 16px; }
+.top .logo { flex: 1; min-height: 60px; }
+.top .logo img { max-width: 160px; max-height: 80px; }
+.top .verify { text-align: center; flex: 2; }
+.top .verify .code { font-size: 15px; font-weight: bold; letter-spacing: 1px; }
+.top .qr { flex: 1; display: flex; justify-content: flex-end; }
+.top .qr > div { background: #fff; padding: 4px; line-height: 0; }
+h1 { text-align: center; font-size: 18px; letter-spacing: 1px; margin: 14px 0 12px; }
+.banner { border: 1px solid; padding: 6px 10px; margin: 0 0 12px; text-align: center; font-weight: bold; }
+.banner.draft { color: #8a5300; border-color: #8a5300; }
+.banner.bad { color: #b3261e; border-color: #b3261e; }
+.parties { display: flex; gap: 24px; margin-bottom: 12px; }
+.parties > div { flex: 1; min-width: 0; }
+.label { font-weight: bold; margin-bottom: 2px; }
+.parties .name { font-weight: bold; }
+.pre { white-space: pre-line; overflow-wrap: anywhere; }
+.info { display: grid; grid-template-columns: 1fr 1fr; column-gap: 24px; row-gap: 2px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 8px 0; margin-bottom: 12px; }
+.info b, .credited b { font-weight: bold; }
+.credited { border: 1px solid var(--line); padding: 8px 10px; margin-bottom: 12px; }
+.credited .grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 24px; row-gap: 2px; }
+table.lines { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+table.lines th { border-bottom: 1.5px solid var(--ink); padding: 5px 6px; text-align: left; vertical-align: bottom; }
+table.lines td { border-bottom: 1px solid var(--line); padding: 5px 6px; vertical-align: top; overflow-wrap: anywhere; }
+table.lines tr.total td { font-weight: bold; border-bottom: 0; }
+.end { text-align: right; }
+.center { text-align: center; }
+.nowrap { white-space: nowrap; }
+.totals { margin-left: auto; width: 55%; border-collapse: collapse; }
+.totals td { padding: 4px 6px; text-align: right; }
+.totals tr.strong td { font-weight: bold; border-top: 1.5px solid var(--ink); }
+.extra { margin-top: 14px; }
+.extra table { border-collapse: collapse; }
+.extra td { padding: 2px 12px 2px 0; vertical-align: top; }
+.footer { margin-top: 14px; }
+.muted { color: var(--muted); }
+</style>
+</head>
+<body>
+<main></main>
+<script src="/resources/qrcode/qrcode.js"></script>
+<script>
+// Keys of the custom fields ZimraEGS maintains. Fields are found by key, or by label as a fallback.
+const F = {
+  status: ['fc6f05f9-50c7-46c0-b9f5-7fe0ca83cf2a', 'Approval Status'],
+  docType: ['b7c1f0de-3a5e-4d7b-9a53-6f2f0c1e7d10', 'Fiscal Document'],
+  qr: ['7eaadfa6-1fb9-4dce-9a1c-9d74beb1d0f7', 'Receipt QRCode'],
+  code: ['a0454495-cae8-43ef-a418-4dad69427e78', 'Verification Code'],
+  date: ['39b3d219-a386-4d9f-b3a0-55968b4bc7b7', 'Receipt Date'],
+  deviceId: ['d08c8744-486f-470d-82d1-29b1a1cb06ae', 'DeviceID'],
+  deviceSn: ['a360538c-ebe9-49e9-8cf8-fccd51320380', 'DeviceSN'],
+  day: ['c6e40e7a-974e-4ffc-9c76-1c1ecfd05693', 'FiscalDayNo'],
+  global: ['4712e5df-c5e3-4b6e-9746-8ebb58a81dee', 'Receipt GlobalNo'],
+  counter: ['a9867045-740b-493f-8b67-43b6da07e41e', 'Receipt Counter'],
+  notes: ['c7e511ba-6e9e-48ad-a61c-084e7d0f38ad', 'Receipt Notes'],
+  refNo: ['c7e511ba-6e9e-48ad-a61c-084e7d0f38ac', 'Receipt NoRef'],
+  refDate: ['39b3d219-a386-4d9f-b3a0-55968b4bc7b8', 'Receipt DateRef'],
+  refDeviceId: ['d08c8744-486f-470d-82d1-29b1a1cb06af', 'DeviceID Ref'],
+  refDeviceSn: ['a360538c-ebe9-49e9-8cf8-fccd51320381', 'DeviceSN Ref'],
+  refDay: ['c6e40e7a-974e-4ffc-9c76-1c1ecfd05694', 'FiscalDayNo Ref'],
+  refCounter: ['a9867045-740b-493f-8b67-43b6da07e41f', 'Receipt CounterRef'],
+  refGlobal: ['4712e5df-c5e3-4b6e-9746-8ebb58a81def', 'Receipt GlobalNoRef'],
+  buyerName: ['d554566a-188b-4c5c-abec-86e1f18eee78', 'Buyer Register Name'],
+  buyerTrade: ['c8def7d7-8d4d-487c-9685-ab0693dccd1f', 'Buyer Trade Name'],
+  buyerTin: ['af771746-d00a-4f78-906c-8946098e1184', 'Buyer TIN'],
+  buyerVat: ['2a0e1d10-e66b-4b12-9b9c-3b3f3b7c35f9', 'Buyer Vat Number'],
+  buyerProvince: ['aec2c1f7-3aed-49fd-82d8-c15a7b69a74f', 'Buyer Province'],
+  buyerCity: ['5fc8a9b9-efef-45d0-94da-1b0438e75725', 'Buyer City'],
+  buyerStreet: ['62e8d3ee-bf4d-4b3e-956f-870ed4d99a90', 'Buyer Street'],
+  buyerHouse: ['568a19c2-bc66-4dc2-8bbd-de0768e7e283', 'Buyer House No'],
+  buyerEmail: ['5b2a8521-9e28-4edf-ac2c-527562349188', 'Buyer Email'],
+  buyerPhone: ['2e909259-6785-419a-aaef-6390a427b5f6', 'Buyer Phone No'],
+  pay1: ['5b3ebf5f-ad4f-4ffc-84d1-abda67a7d294', 'Payment Type 1'],
+  amount1: ['e2ab11ef-73e2-4ea4-802f-55b8c834037d', 'Payment Amount 1'],
+  pay2: ['cb790f2c-f1b2-41d7-9b37-2ba19af4d797', 'Payment Type 2'],
+  amount2: ['f3a2f5dd-8da8-4701-b8d5-be5877792a79', 'Payment Amount 2'],
+  // Kept on the business for the server; never printed.
+  link: ['6a347c55-735a-4a38-8cf6-0db93dce2ded', 'Certificate Info'],
+  version: ['329de867-9cf1-4dfe-8b06-5084bce788c8', 'EGS Version'],
+  response: ['75190339-992a-4fb0-bf79-f5f8226edb4b', 'Server Response'],
+};
+
+function el(tag, attrs, children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k === 'text') node.textContent = v; else node.setAttribute(k, v);
+  }
+  for (const c of children || []) if (c) node.append(c);
+  return node;
+}
+
+// Numbers such as the device ID arrive formatted ("39,971"); print them as plain numbers.
+const plain = s => String(s || '').replace(/[,\s](?=\d{3}\b)/g, '').replace(/\.0+$/, '');
+
+// An address saved by an earlier version contains HTML; show its text only.
+function addressText(value, skip) {
+  let s = String(value || '');
+  if (/<[a-z][^>]*>/i.test(s)) {
+    s = s.replace(/<br\s*\/?>/gi, ', ').replace(/<\/div>/gi, '\n').replace(/<[^>]+>/g, '');
+    s = s.split('\n').map(x => x.trim()).filter(x => x && x.toUpperCase() !== 'SELLER' && x !== skip).join('\n');
+  }
+  return s.trim();
+}
+
+function renderDocument(data) {
+  const main = document.querySelector('main');
+  const used = new Set();
+  const fields = data.fields || [];
+  function field(name) {
+    const [key, label] = F[name];
+    const f = fields.find(x => (x.key || '').toLowerCase() === key) || fields.find(x => x.label === label);
+    if (f) used.add(f);
+    return f && f.text ? String(f.text).trim() : '';
+  }
+  // The fields ZimraEGS maintains are all placed deliberately below; none is listed again at the end.
+  Object.keys(F).forEach(field);
+
+  const status = field('status').toUpperCase();
+  const fiscalised = status === 'APPROVED' || status === 'REJECTED';
+  const qrUrl = field('qr');
+  const business = data.business || {};
+  const sellerAddress = addressText(business.address, business.name);
+  const sellerIsVatPayer = /VAT\s*No:?\s*\d/i.test(sellerAddress);
+
+  // ZimraEGS records the prescribed title when it fiscalises the document. Documents fiscalised before
+  // that was introduced fall back to what can be told from the document itself.
+  const recorded = field('docType').toUpperCase();
+  const isCreditDocument = /NOTE/.test(recorded) || /credit/i.test(data.title || '') || !!field('refGlobal');
+  const isDebit = recorded === 'DEBIT NOTE';
+  const title = recorded || (isCreditDocument ? 'CREDIT NOTE' : (sellerIsVatPayer ? 'FISCAL TAX INVOICE' : 'FISCAL INVOICE'));
+
+  document.title = [fiscalised ? title : (data.title || 'Invoice'), data.reference, data.businessName].filter(Boolean).join(' - ');
+
+  // Header: logo, verification code and where to verify, QR code.
+  const qrBox = el('div');
+  let verifyAt = '';
+  try { verifyAt = qrUrl ? new URL(qrUrl).origin + '/' : ''; } catch (e) { /* not a URL */ }
+  main.append(el('div', { class: 'top' }, [
+    el('div', { class: 'logo' }, [business.logo ? el('img', { src: business.logo, alt: '' }) : null]),
+    el('div', { class: 'verify' }, fiscalised && field('code') ? [
+      el('div', { text: 'Verification code' }),
+      el('div', { class: 'code', text: field('code') }),
+      verifyAt ? el('div', { text: 'You can verify this receipt manually at' }) : null,
+      verifyAt ? el('div', { text: verifyAt }) : null,
+    ] : []),
+    el('div', { class: 'qr' }, [fiscalised && qrUrl ? qrBox : null]),
+  ]));
+  if (fiscalised && qrUrl && window.QRCode) {
+    try { new QRCode(qrBox, { text: qrUrl, width: 96, height: 96, correctLevel: QRCode.CorrectLevel.L }); } catch (e) { /* no QR */ }
+  }
+
+  main.append(el('h1', { text: fiscalised ? title : (data.title || 'Invoice').toUpperCase() }));
+  if (!fiscalised) main.append(el('div', { class: 'banner draft', text: 'NOT FISCALISED. This is not a fiscal document until it has been sent to ZIMRA.' }));
+  if (status === 'REJECTED') main.append(el('div', { class: 'banner bad', text: 'ZIMRA recorded this receipt with validation errors.' }));
+
+  // Seller and buyer.
+  const buyerName = field('buyerName');
+  const buyerLines = [
+    field('buyerTrade'),
+    field('buyerTin') ? 'TIN: ' + field('buyerTin') : '',
+    field('buyerVat') ? 'VAT: ' + field('buyerVat') : '',
+    [field('buyerHouse'), field('buyerStreet'), field('buyerCity'), field('buyerProvince')].filter(Boolean).join(', '),
+    field('buyerEmail'), field('buyerPhone'),
+  ].filter(Boolean);
+  const recipient = data.recipient || {};
+  const hasBuyer = buyerName || buyerLines.length;
+  main.append(el('div', { class: 'parties' }, [
+    el('div', {}, [
+      el('div', { class: 'label', text: 'SELLER' }),
+      el('div', { class: 'name', text: business.name || data.businessName || '' }),
+      el('div', { class: 'pre', text: sellerAddress }),
+    ]),
+    hasBuyer ? el('div', {}, [
+      el('div', { class: 'label', text: 'BUYER' }),
+      el('div', { class: 'name', text: buyerName || recipient.name || '' }),
+      el('div', { class: 'pre', text: buyerLines.join('\n') }),
+    ]) : el('div'),
+  ]));
+
+  // Receipt information.
+  const pair = (label, value) => value ? el('div', {}, [el('b', { text: label + ': ' }), value]) : null;
+  const due = fields.find(f => /due/i.test(f.key || '') && f.text);
+  if (due) used.add(due);
+  fields.filter(f => f.key && !/^[0-9a-f-]{36}$/i.test(f.key)).forEach(f => used.add(f));   // Manager's own date and number rows
+  if (fiscalised) {
+    const counter = plain(field('counter')), globalNo = plain(field('global'));
+    main.append(el('div', { class: 'info' }, [
+      pair('Invoice No', [counter, globalNo].filter(Boolean).join('/')),
+      pair('Fiscal day No', plain(field('day'))),
+      pair('Customer reference No', data.reference),
+      pair('Date', field('date')),
+      pair('Device Serial No', field('deviceSn')),
+      pair('Fiscal device ID', plain(field('deviceId'))),
+      due ? pair(due.label, due.text) : null,
+    ]));
+  } else {
+    main.append(el('div', { class: 'info' }, fields.filter(f => f.key && !/^[0-9a-f-]{36}$/i.test(f.key) && f.text).map(f => pair(f.label, f.text))));
+  }
+
+  // Credited or debited invoice.
+  if (fiscalised && isCreditDocument) {
+    main.append(el('div', { class: 'credited' }, [
+      el('div', { class: 'label', text: isDebit ? 'DEBITED INVOICE' : 'CREDITED INVOICE' }),
+      el('div', { class: 'grid' }, [
+        pair('Invoice No', [plain(field('refCounter')), plain(field('refGlobal'))].filter(Boolean).join('/')),
+        pair('Customer reference No', field('refNo')),
+        pair('Date', field('refDate')),
+        pair('Device Serial No', field('refDeviceSn')),
+        pair('Fiscal device ID', plain(field('refDeviceId'))),
+      ]),
+      field('notes') ? el('div', { style: 'margin-top:4px' }, [el('b', { text: 'Reason: ' }), field('notes')]) : null,
+    ]));
+  }
+
+  // Lines, exactly as Manager laid them out.
+  const table = data.table || {};
+  const columns = table.columns || [];
+  const alignClass = c => /end|right/i.test(String(c.align)) ? 'end' : /center/i.test(String(c.align)) ? 'center' : '';
+  if (table.description) main.append(el('p', { class: 'pre', text: table.description }));
+  if (columns.length) {
+    const lines = el('table', { class: 'lines' });
+    lines.append(el('thead', {}, [el('tr', {}, columns.map(c => el('th', { class: alignClass(c), text: c.label })))]));
+    const body = el('tbody');
+    for (const row of table.rows || []) {
+      if (!row.cells) continue;
+      body.append(el('tr', { class: row.isTotalRow ? 'total' : null }, row.cells.map((cell, i) => {
+        const c = columns[i] || {};
+        const td = el('td', { class: [alignClass(c), c.nowrap ? 'nowrap' : ''].join(' ').trim() || null });
+        if (cell && cell.image && cell.image.url) td.append(el('img', { src: cell.image.url, alt: '', style: 'max-height:40px' }));
+        td.append((cell && cell.text) || '');
+        return td;
+      })));
+    }
+    lines.append(body);
+    main.append(lines);
+  }
+
+  // Totals.
+  if ((data.totals || []).length) {
+    main.append(el('table', { class: 'totals' }, data.totals.map(t => el('tr', { class: t.emphasis ? 'strong' : null }, [
+      el('td', { text: t.label }), el('td', { class: 'nowrap', text: t.text }),
+    ]))));
+  }
+
+  // How it was paid, when the document says so.
+  const payments = [[field('pay1'), field('amount1')], [field('pay2'), field('amount2')]].filter(p => p[0]);
+  if (payments.length) {
+    main.append(el('div', { class: 'extra' }, [el('b', { text: 'Paid by: ' }),
+      payments.map(p => p[0].replace(/^\d+\s*[|-]\s*/, '') + (p[1] ? ' ' + p[1] : '')).join(', ')]));
+  }
+
+  // Any other fields the business shows on its documents.
+  const others = fields.filter(f => !used.has(f) && (f.text || (f.image && f.image.url)));
+  if (others.length) {
+    main.append(el('div', { class: 'extra' }, [el('table', {}, others.map(f => el('tr', {}, [
+      el('td', { class: 'muted', text: f.label }),
+      el('td', {}, [f.image && f.image.url ? el('img', { src: f.image.url, alt: '', style: 'max-height:60px' }) : null, f.text || '']),
+    ])))]));
+  }
+
+  // Footers are prepared by Manager as HTML.
+  for (const footer of data.footers || []) {
+    const div = el('div', { class: 'footer' });
+    div.innerHTML = footer;
+    main.append(div);
+  }
+}
+
+fetch('/api4/view-v1' + window.location.search, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+  .then(response => response.json())
+  .then(renderDocument)
+  .catch(error => { document.querySelector('main').textContent = 'The document could not be loaded: ' + error.message; });
+</script>
+</body>
+</html>

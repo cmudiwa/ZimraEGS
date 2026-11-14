@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using ZimraEGS.ApiClient.Helpers;
 using ZimraEGS.ApiClient.Models;
 
@@ -52,7 +52,20 @@ namespace ZimraEGS.Models
         }
         public string ToBusinessAddress()
         {
-            return $"<div>\n<div style='font-weight: bold; color: black; text-shadow: 2px 2px 4px #aaa;'>SELLER</div>\n<div style='font-weight: bold;'>{TaxPayerName}</div>\n<div>{DeviceBranchName}</div>\n<div>TIN: {TaxPayerTIN} — Vat No: {VatNumber}</div>\n<div>{Province} — {City} <br>{Street} — {HouseNo}</div>\n<div>Email: {Email}</div>\n<div>Phone No: {PhoneNo}</div>\n</div>";
+            // Plain text, one item per line: Manager prints the address as text and the invoice theme
+            // reads the VAT number from it to choose between "FISCAL TAX INVOICE" and "FISCAL INVOICE".
+            var lines = new List<string>();
+            if (!string.IsNullOrWhiteSpace(DeviceBranchName)) lines.Add(DeviceBranchName.Trim());
+            var ids = new List<string>();
+            if (!string.IsNullOrWhiteSpace(TaxPayerTIN)) ids.Add($"TIN: {TaxPayerTIN.Trim()}");
+            if (!string.IsNullOrWhiteSpace(VatNumber)) ids.Add($"VAT No: {VatNumber.Trim()}");
+            if (ids.Count > 0) lines.Add(string.Join("   ", ids));
+            string address = string.Join(", ", new[] { HouseNo, Street, City, Province }
+                .Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase));
+            if (address.Length > 0) lines.Add(address);
+            if (!string.IsNullOrWhiteSpace(Email)) lines.Add(Email.Trim());
+            if (!string.IsNullOrWhiteSpace(PhoneNo)) lines.Add(PhoneNo.Trim());
+            return string.Join("\n", lines);
         }
     }
 

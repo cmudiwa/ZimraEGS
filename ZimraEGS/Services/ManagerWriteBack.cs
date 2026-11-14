@@ -105,6 +105,7 @@ namespace ZimraEGS.Services
                 [ManagerCustomField.ReceiptQRCodeGuid] = row.QrCode,
                 [ManagerCustomField.VerificationCodeGuid] = row.VerificationCode,
                 [ManagerCustomField.DeviceSNGuid] = device.SerialNumber,
+                [ManagerCustomField.FiscalDocumentGuid] = FiscalDocumentTitle(device, row.ReceiptType),
             };
             var decimals = new Newtonsoft.Json.Linq.JObject
             {
@@ -135,9 +136,21 @@ namespace ZimraEGS.Services
                 {
                     ["issueDate"] = receiptDate.ToString("yyyy-MM-dd") + "T00:00:00",
                     ["reference"] = row.InvoiceNo,
+                    // Print it in ZIMRA's layout.
+                    ["customTheme"] = true,
+                    ["customThemeId"] = ManagerSetupData.ThemeKey,
                     ["customFields2"] = new Newtonsoft.Json.Linq.JObject { ["strings"] = strings, ["decimals"] = decimals },
                 },
             };
+        }
+
+        /// <summary>The title ZIMRA prescribes for the printed document.</summary>
+        public static string FiscalDocumentTitle(Device device, ReceiptType type)
+        {
+            if (type == ReceiptType.CreditNote) return "CREDIT NOTE";
+            if (type == ReceiptType.DebitNote) return "DEBIT NOTE";
+            string? vatNumber = DeviceStore.GetConfig(device)?.VatNumber ?? DeviceStore.GetInfo(device).VatNumber;
+            return string.IsNullOrWhiteSpace(vatNumber) ? "FISCAL INVOICE" : "FISCAL TAX INVOICE";
         }
 
         /// <summary>Stores the device link in the business details through Manager's current API.</summary>
@@ -150,7 +163,7 @@ namespace ZimraEGS.Services
                     ["strings"] = new Newtonsoft.Json.Linq.JObject
                     {
                         [ManagerCustomField.CertificateInfoGuid] = deviceLink,
-                        [ManagerCustomField.AppVersionGuid] = VersionHelper.GetVersion(),
+                        [ManagerCustomField.AppVersionGuid] = ManagerSetupData.SetupMarker,
                         // A null removes the value: these held device state before it moved to the server.
                         [ManagerCustomField.BusinessReferenceGuid] = null,
                         [ManagerCustomField.FiscalDaySummaryGuid] = null,

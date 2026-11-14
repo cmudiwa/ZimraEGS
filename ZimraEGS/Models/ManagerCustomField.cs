@@ -1,4 +1,4 @@
-﻿namespace ZimraEGS.Models
+namespace ZimraEGS.Models
 {
     public static class ManagerCustomField
     {
@@ -31,6 +31,8 @@
         public const string ApprovalStatusGuid = "fc6f05f9-50c7-46c0-b9f5-7fe0ca83cf2a"; 
         public const string ReceiptQRCodeGuid = "7eaadfa6-1fb9-4dce-9a1c-9d74beb1d0f7"; 
         public const string VerificationCodeGuid = "a0454495-cae8-43ef-a418-4dad69427e78"; 
+        /// <summary>Title the fiscal document must carry when printed, e.g. "FISCAL TAX INVOICE" or "CREDIT NOTE".</summary>
+        public const string FiscalDocumentGuid = "b7c1f0de-3a5e-4d7b-9a53-6f2f0c1e7d10";
         public const string ServerResponseGuid = "75190339-992a-4fb0-bf79-f5f8226edb4b"; 
 
         public const string DeviceIDGuid = "d08c8744-486f-470d-82d1-29b1a1cb06ae";
