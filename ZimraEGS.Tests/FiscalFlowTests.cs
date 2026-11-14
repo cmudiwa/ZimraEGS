@@ -185,6 +185,7 @@ public class FiscalFlowTests : IDisposable
         Assert.Null(sent.BuyerData.BuyerContacts);
         Assert.Null(sent.BuyerData.BuyerAddress);
         Assert.Equal(3, sent.ReceiptLines.Single().TaxID);
+        Assert.Equal("12345678", sent.ReceiptLines.Single().ReceiptLineHSCode);
 
         // What the browser writes back into Manager.
         var call = ManagerWriteBack.Invoice(relay, device, result.Receipt);
@@ -310,6 +311,12 @@ public class FiscalFlowTests : IDisposable
         Assert.Contains("how this invoice is paid", string.Join(" ", noPayment.result.Problems));
         Assert.Contains("must be equal", string.Join(" ", wrongAmount.result.Problems));
         Assert.Contains("HS Code is missing", string.Join(" ", noHsCode.result.Problems));
+
+        // HS codes have 4 or 8 digits, and a VAT payer's zero-rated or exempt line needs all 8.
+        var badLength = await RelayAsync(RelayForm(link, Guid.NewGuid().ToString(), [new("Widget", 1, 10m, TaxStandard, 15, Hs: "252329")]));
+        var shortOnZero = await RelayAsync(RelayForm(link, Guid.NewGuid().ToString(), [new("Bread", 1, 10m, TaxZero, 0, Hs: "1905")]));
+        Assert.Contains("must have 4 or 8 digits", string.Join(" ", badLength.result.Problems));
+        Assert.Contains("8-digit HS Code", string.Join(" ", shortOnZero.result.Problems));
         Assert.Contains("14.5%", string.Join(" ", wrongRate.result.Problems));
         Assert.Equal(0, _fdms.SubmitCalls);
 
@@ -619,6 +626,18 @@ public class FiscalFlowTests : IDisposable
         Assert.InRange((sent.ReceiptDate - zimraNow).Duration(), TimeSpan.Zero, TimeSpan.FromSeconds(30));
         Assert.True(sent.ReceiptDate >= _fdms.DayOpenedAt, "the receipt must not be dated before the fiscal day opened");
         Assert.Empty(_fdms.Violations);
+    }
+
+    [Fact]
+    public async Task A_four_digit_hs_code_is_sent_as_entered_and_the_configuration_is_read_before_the_day_opens()
+    {
+        string link = await RegisterDeviceAsync();
+
+        var (result, _, _) = await RelayAsync(RelayForm(link, Guid.NewGuid().ToString(), [new("Cement", 1, 10m, TaxStandard, 15, Hs: "2523")]));
+
+        Assert.True(result.Success, string.Join("; ", result.Problems));
+        Assert.Equal("2523", _fdms.AllReceipts.Single().ReceiptLines.Single().ReceiptLineHSCode);
+        Assert.True(_fdms.ConfigReadBeforeOpenDay, "getConfig must be called before a new fiscal day is opened");
     }
 
     [Fact]

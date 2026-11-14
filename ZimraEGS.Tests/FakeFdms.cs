@@ -75,7 +75,12 @@ public class FakeFdms : IFdmsClientFactory, IFdmsClient
         fiscalDayClosingErrorCode = DayStatus == FiscalDayStatus.FiscalDayCloseFailed ? CloseDayError?.ToString() : null
     }));
 
-    public Task<ServerResponse> GetConfigAsync() => Task.FromResult(Ok(new
+    private bool _configRead;
+    public bool ConfigReadBeforeOpenDay;
+
+    public Task<ServerResponse> GetConfigAsync() { _configRead = true; return GetConfigCoreAsync(); }
+
+    private Task<ServerResponse> GetConfigCoreAsync() => Task.FromResult(Ok(new
     {
         operationID = "op",
         taxPayerName = "Test Trader",
@@ -103,6 +108,8 @@ public class FakeFdms : IFdmsClientFactory, IFdmsClient
         if (DayStatus != FiscalDayStatus.FiscalDayClosed) return Task.FromResult(Fail(HttpStatusCode.BadRequest, "FISC01", "Fiscal day is not closed"));
         if (request.FiscalDayNo != LastFiscalDayNo + 1) return Task.FromResult(Fail(HttpStatusCode.BadRequest, "FISC02", "Wrong fiscal day number"));
 
+        ConfigReadBeforeOpenDay = _configRead;
+        _configRead = false;
         LastFiscalDayNo++;
         DayStatus = FiscalDayStatus.FiscalDayOpened;
         DayOpened = request.FiscalDayOpened.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);

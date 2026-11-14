@@ -259,6 +259,11 @@ namespace ZimraEGS.Services
                     name = name[..200];
                 }
 
+                var (taxID, taxPercent) = ResolveTax(line, applicableTaxes, $"{label} ({name})", problems);
+
+                // ZIMRA: a VAT payer must send an HS code. It has 4 or 8 digits, and exactly 8 for a VAT payer's
+                // zero-rated or exempt line. The code is sent as entered; padding it would change its meaning.
+                bool zeroOrExempt = taxPercent is null or 0;
                 if (string.IsNullOrEmpty(hsCode))
                 {
                     if (sellerIsVatRegistered)
@@ -266,9 +271,13 @@ namespace ZimraEGS.Services
                         problems.Add($"{label} ({name}): the HS Code is missing. Set it on the inventory item or the line.");
                     }
                 }
-                else if (hsCode.Length > 8 || !hsCode.All(char.IsDigit))
+                else if (!hsCode.All(char.IsDigit) || (hsCode.Length != 4 && hsCode.Length != 8))
                 {
-                    problems.Add($"{label} ({name}): HS Code \"{hsCode}\" must be up to 8 digits.");
+                    problems.Add($"{label} ({name}): HS Code \"{hsCode}\" must have 4 or 8 digits.");
+                }
+                else if (sellerIsVatRegistered && zeroOrExempt && hsCode.Length != 8)
+                {
+                    problems.Add($"{label} ({name}): a zero-rated or exempt line needs the full 8-digit HS Code, not \"{hsCode}\".");
                 }
 
                 if (line.Qty <= 0)
@@ -276,8 +285,8 @@ namespace ZimraEGS.Services
                     problems.Add($"{label} ({name}): the quantity must be greater than zero.");
                 }
 
-                var (taxID, taxPercent) = ResolveTax(line, applicableTaxes, $"{label} ({name})", problems);
-                resolved.Add((line, name, hsCode.PadLeft(8, '0'), taxID, taxPercent));
+                string? sentHsCode = string.IsNullOrEmpty(hsCode) ? null : hsCode;
+                resolved.Add((line, name, sentHsCode ?? string.Empty, taxID, taxPercent));
 
                 decimal price = sign * Round(line.UnitPrice, 4);
 
@@ -286,7 +295,7 @@ namespace ZimraEGS.Services
                     ReceiptLineType = ReceiptLineType.Sale,
                     ReceiptLineNo = number,
                     ReceiptLineName = name,
-                    ReceiptLineHSCode = hsCode.PadLeft(8, '0'),
+                    ReceiptLineHSCode = sentHsCode!,
                     ReceiptLineQuantity = Round(line.Qty, 2),
                     ReceiptLinePrice = price,
                     ReceiptLineTotal = Round(line.Qty * price, 2),
@@ -309,7 +318,7 @@ namespace ZimraEGS.Services
                     ReceiptLineType = ReceiptLineType.Discount,
                     ReceiptLineNo = number,
                     ReceiptLineName = ("Discount: " + name).Length > 200 ? ("Discount: " + name)[..200] : "Discount: " + name,
-                    ReceiptLineHSCode = hsCode,
+                    ReceiptLineHSCode = string.IsNullOrEmpty(hsCode) ? null! : hsCode,
                     ReceiptLineQuantity = Round(qty, 2),
                     ReceiptLinePrice = price,
                     ReceiptLineTotal = Round(qty * price, 2),

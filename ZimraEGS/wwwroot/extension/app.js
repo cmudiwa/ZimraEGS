@@ -256,6 +256,9 @@
         var s = state.server || {};
         if (!s.day || !s.deviceLink) return null;
         var children = [el('div', { class: 'small', text: 'Fiscal day ' + s.day.number + (s.day.open ? ' is open. It is closed automatically every night.' : ' is closed. The next document opens a new day.') })];
+        if (s.day.open && s.day.endingSoon) children.push(note('warn', s.day.hoursLeft > 0
+            ? 'This fiscal day reaches the maximum length ZIMRA allows in about ' + s.day.hoursLeft + ' hours. It will be closed automatically before then.'
+            : 'This fiscal day has reached the maximum length ZIMRA allows. It is closed before the next document is sent.'));
         if (s.day.lastCloseError) children.push(note('warn', 'Last attempt to close the day failed: ' + s.day.lastCloseError));
         if (s.day.open) {
             var status = el('span', { class: 'small' });

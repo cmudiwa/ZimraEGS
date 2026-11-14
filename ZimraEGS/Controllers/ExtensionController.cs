@@ -88,13 +88,31 @@ namespace ZimraEGS.Controllers
             return context;
         }
 
-        private static object Day(Device device) => new
+        private static object Day(Device device)
         {
-            status = device.FiscalDayStatus.ToString(),
-            open = device.FiscalDayStatus != FiscalDayStatus.FiscalDayClosed,
-            number = device.FiscalDayNo,
-            lastCloseError = device.LastCloseDayError,
-        };
+            bool open = device.FiscalDayStatus != FiscalDayStatus.FiscalDayClosed;
+            var config = DeviceStore.GetConfig(device);
+            var opened = TimeZoneHelper.ParseFdmsString(device.FiscalDayOpened);
+
+            // ZIMRA limits how long a fiscal day may stay open and wants the user warned shortly before.
+            double? hoursLeft = null;
+            bool endingSoon = false;
+            if (open && opened != null && config != null && config.TaxPayerDayMaxHrs > 0)
+            {
+                hoursLeft = Math.Round((opened.Value.AddHours(config.TaxPayerDayMaxHrs) - TimeZoneHelper.GetSouthAfricaTime()).TotalHours, 1);
+                endingSoon = hoursLeft <= config.TaxpayerDayEndNotificationHrs;
+            }
+
+            return new
+            {
+                status = device.FiscalDayStatus.ToString(),
+                open,
+                number = device.FiscalDayNo,
+                lastCloseError = device.LastCloseDayError,
+                hoursLeft,
+                endingSoon,
+            };
+        }
 
         private static object CallsOf(IEnumerable<ManagerApiCall> calls) => calls.Select(c => new { method = c.Method, path = c.ApiUrl, body = c.Body }).ToList();
 

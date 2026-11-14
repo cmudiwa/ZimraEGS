@@ -451,6 +451,13 @@ namespace ZimraEGS.Services
             // Closed at FDMS: open the next day.
             await RenewCertificateIfDueAsync(device);
 
+            // ZIMRA requires the configuration (taxes, day length) to be fetched before a new day is opened,
+            // so the day runs on the taxes that apply to it.
+            using (var configClient = CreateClient(device))
+            {
+                await EnsureConfigAsync(device, configClient, force: true);
+            }
+
             var request = new OpenDayRequest
             {
                 FiscalDayNo = (status.LastFiscalDayNo ?? 0) + 1,
@@ -479,8 +486,6 @@ namespace ZimraEGS.Services
 
             _logger.LogInformation("Opened fiscal day {DayNo} for device {DeviceID}", device.FiscalDayNo, device.DeviceID);
 
-            // ZIMRA expects the configuration to be refreshed whenever a day is opened.
-            await EnsureConfigAsync(device, openClient, force: true);
             return null;
         }
 
