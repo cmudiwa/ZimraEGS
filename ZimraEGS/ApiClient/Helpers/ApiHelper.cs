@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using ZimraEGS.ApiClient.Models;
@@ -80,9 +80,11 @@ namespace ZimraEGS.ApiClient.Helpers
             options ??= new FdmsOptions();
             _baseUrl = ResolveBaseUrl(environmentType, options);
 
-            // EphemeralKeySet is not supported on macOS; the default key set works everywhere.
+            // On Linux the key can stay in memory. Windows cannot use an in-memory key for TLS client
+            // authentication and macOS does not support it at all, so there the default key set is used;
+            // the temporary key is removed again when the certificate is disposed.
             _certificate = new X509Certificate2(Convert.FromBase64String(pfxBase64), (string?)null,
-                OperatingSystem.IsMacOS() ? X509KeyStorageFlags.DefaultKeySet : X509KeyStorageFlags.EphemeralKeySet);
+                OperatingSystem.IsLinux() ? X509KeyStorageFlags.EphemeralKeySet : X509KeyStorageFlags.DefaultKeySet);
 
             _httpClient = new HttpClient(CreateHandler(options, _certificate)) { Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds) };
         }
