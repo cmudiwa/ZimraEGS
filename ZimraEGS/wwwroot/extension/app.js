@@ -94,6 +94,53 @@
 
     function isKey(value) { return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value); }
 
+    // ---------- the ZIMRA button ----------
+
+    function sameEndpoint(value) {
+        var mine = (location.origin + '/extension').replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase();
+        return String(value || '').replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase() === mine;
+    }
+
+    // The buttons this business already has for this server, as [{ key, placement }].
+    async function existingButtons() {
+        var list = await manager('GET', '/api4/extension-batch?pageSize=500', null, true).catch(function () { return null; });
+        var items = (list && (list.items || list.Items)) || [];
+        return items.map(function (it) {
+            var v = it.item || it.Item || it.value || it.Value || {};
+            return { key: String(it.key || it.Key || '').toLowerCase(), placement: v.placement || v.Placement, endpoint: v.endpoint || v.Endpoint };
+        }).filter(function (b) { return sameEndpoint(b.endpoint); });
+    }
+
+    // Adds the button where it is missing. A page that already has one, such as the button added by hand
+    // to get here, is left alone so it does not end up with two.
+    async function installButtons() {
+        var existing = await existingButtons();
+        var current = (state.page.path || '').replace(/^\//, '');
+        for (var i = 0; i < PLACEMENTS.length; i++) {
+            var p = PLACEMENTS[i];
+            var others = existing.filter(function (b) { return b.placement === p.placement && b.key !== p.key; });
+            if (others.length || (p.placement === current && !existing.length)) continue;
+            await manager('PUT', '/api4/extension', {
+                key: p.key, business: state.page.business,
+                value: { name: EXTENSION_NAME, source: 0, endpoint: location.origin + '/extension', placement: p.placement }
+            });
+        }
+    }
+
+    // An earlier version added its own button next to one added by hand. Remove that extra one.
+    async function removeDuplicateButtons() {
+        try {
+            var existing = await existingButtons();
+            for (var i = 0; i < PLACEMENTS.length; i++) {
+                var p = PLACEMENTS[i];
+                var here = existing.filter(function (b) { return b.placement === p.placement; });
+                if (here.length > 1 && here.some(function (b) { return b.key === p.key; })) {
+                    await manager('DELETE', '/api4/extension?key=' + encodeURIComponent(p.key) + '&business=' + encodeURIComponent(state.page.business || ''), null, true);
+                }
+            }
+        } catch (e) { console.warn(e); }
+    }
+
     // ---------- reading the open document ----------
 
     async function readDocument() {
@@ -367,17 +414,9 @@
             try { await applyCalls(setup.ApiCalls); } catch (e) { s2.fail(); throw e; }
             s2.done();
 
-            var s3 = step('Add the ZIMRA button to credit notes');
-            try {
-                var endpoint = location.origin + '/extension';
-                for (var i = 0; i < PLACEMENTS.length; i++) {
-                    await manager('PUT', '/api4/extension', {
-                        key: PLACEMENTS[i].key, business: state.page.business,
-                        value: { name: EXTENSION_NAME, source: 0, endpoint: endpoint, placement: PLACEMENTS[i].placement }
-                    });
-                }
-                s3.done();
-            } catch (e) { s3.fail(); console.warn(e); /* not essential: the button can be added by hand */ }
+            var s3 = step('Add the ZIMRA button to invoices and credit notes');
+            try { await installButtons(); s3.done(); }
+            catch (e) { s3.fail(); console.warn(e); /* not essential: the button can be added by hand */ }
 
             await start();
         }
@@ -455,6 +494,7 @@
             }
 
             await load();
+            removeDuplicateButtons();
             busy('Checking the document…');
             await prepare();
         } catch (e) { fail(e); }
