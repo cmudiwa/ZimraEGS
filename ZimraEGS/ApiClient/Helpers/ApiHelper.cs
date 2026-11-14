@@ -149,7 +149,7 @@ namespace ZimraEGS.ApiClient.Helpers
             using var response = await _httpClient.SendAsync(requestMessage);
             var responseContent = await response.Content.ReadAsStringAsync();
 
-            return new ServerResponse(endpoint, response.StatusCode, responseContent);
+            return new ServerResponse(endpoint, response.StatusCode, responseContent) { ServerTime = response.Headers.Date };
         }
 
         public void Dispose()

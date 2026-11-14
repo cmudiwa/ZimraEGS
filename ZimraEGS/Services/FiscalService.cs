@@ -214,14 +214,15 @@ namespace ZimraEGS.Services
 
         private FiscalReceipt PrepareReceipt(Device device, RelayData relay, Receipt receipt, GetStatusResponse status, string? qrUrl)
         {
-            var now = TimeZoneHelper.GetSouthAfricaTime();
+            var now = ZimraNow();
             // FDMS works in whole seconds; the signed date must be exactly the date that is sent.
             var receiptDate = new DateTimeOffset(now.Year, now.Month, now.Day, now.Hour, now.Minute, now.Second, now.Offset);
 
             receipt.ReceiptCounter = device.LastReceiptCounter + 1;
             receipt.ReceiptGlobalNo = Math.Max(device.LastReceiptGlobalNo, status.LastReceiptGlobalNo) + 1;
             receipt.ReceiptDate = receiptDate;
-            receipt.InvoiceNo = $"{device.FiscalDayNo:D4}-{receipt.ReceiptCounter:D4}";
+            // ZIMRA requires invoice numbers to be unique for the taxpayer, across all of its devices.
+            receipt.InvoiceNo = $"{device.DeviceID}-{device.FiscalDayNo:D4}-{receipt.ReceiptCounter:D4}";
 
             string privateKey = _store.Unprotect(device.ProtectedPrivateKey);
             string source = ReceiptSigner.ReceiptHashSource(device.DeviceID, receipt, device.LastReceiptHash);
@@ -373,9 +374,28 @@ namespace ZimraEGS.Services
         // Fiscal day
         // ---------------------------------------------------------------------------------------
 
-        private static async Task<(GetStatusResponse? status, FiscaliseResult? problem)> GetStatusAsync(IFdmsClient client)
+        /// <summary>
+        /// Difference between ZIMRA's clock and this machine's. Receipt and fiscal day times are stamped with
+        /// ZIMRA's time, so a wrong clock or time zone on this machine cannot produce receipts that ZIMRA
+        /// sees as dated before the day opened.
+        /// </summary>
+        private TimeSpan _clockOffset = TimeSpan.Zero;
+
+        private DateTimeOffset ZimraNow() => DateTimeOffset.UtcNow.Add(_clockOffset).ToOffset(TimeZoneHelper.ZimbabweOffset);
+
+        private async Task<(GetStatusResponse? status, FiscaliseResult? problem)> GetStatusAsync(IFdmsClient client)
         {
             var response = await client.GetStatusAsync();
+            if (response.ServerTime is { } serverTime)
+            {
+                var offset = serverTime - DateTimeOffset.UtcNow;
+                // The header has whole seconds and the answer takes time to arrive: ignore small differences.
+                _clockOffset = offset.Duration() > TimeSpan.FromSeconds(5) ? offset : TimeSpan.Zero;
+                if (offset.Duration() > TimeSpan.FromMinutes(2))
+                {
+                    _logger.LogWarning("This machine's clock differs from ZIMRA's by {Offset}. ZIMRA's time is used for receipts; correct the clock or time zone.", offset);
+                }
+            }
             if (!response.IsSuccess)
             {
                 return (null, FiscaliseResult.Problem("ZIMRA did not accept the device", response.DescribeError()));
@@ -408,7 +428,7 @@ namespace ZimraEGS.Services
                 // The day has run past the maximum length ZIMRA allows: close it and start a new one.
                 var opened = TimeZoneHelper.ParseFdmsString(device.FiscalDayOpened)!.Value;
                 int maxHours = DeviceStore.GetConfig(device)?.TaxPayerDayMaxHrs ?? DeviceStore.GetInfo(device).TaxPayerDayMaxHrs;
-                if (maxHours > 0 && TimeZoneHelper.GetSouthAfricaTime() > opened.AddHours(maxHours))
+                if (maxHours > 0 && ZimraNow() > opened.AddHours(maxHours))
                 {
                     var close = await CloseDayCoreAsync(device, client);
                     if (!close.Success)
@@ -434,7 +454,7 @@ namespace ZimraEGS.Services
             var request = new OpenDayRequest
             {
                 FiscalDayNo = (status.LastFiscalDayNo ?? 0) + 1,
-                FiscalDayOpened = TimeZoneHelper.ParseFdmsString(TimeZoneHelper.GetSouthAfricaTimeString())!.Value
+                FiscalDayOpened = TimeZoneHelper.ParseFdmsString(TimeZoneHelper.ToFdmsString(ZimraNow()))!.Value
             };
 
             // A renewed certificate needs a client that presents it.

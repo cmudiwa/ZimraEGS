@@ -12,6 +12,9 @@ namespace ZimraEGS.ApiClient.Helpers
 
         public bool IsSuccess => StatusCode == HttpStatusCode.OK;
 
+        /// <summary>ZIMRA's clock at the time of the answer (HTTP Date header), when it was sent.</summary>
+        public DateTimeOffset? ServerTime { get; init; }
+
         public ServerResponse(string endpoint, HttpStatusCode statusCode, string responseContent)
         {
             Endpoint = endpoint;

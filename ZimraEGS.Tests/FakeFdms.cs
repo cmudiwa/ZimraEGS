@@ -38,6 +38,10 @@ public class FakeFdms : IFdmsClientFactory, IFdmsClient
     public List<ValidationError>? NextValidationErrors;
     public FiscalDayProcessingError? CloseDayError;
 
+    /// <summary>How far ZIMRA's clock is ahead of this machine's.</summary>
+    public TimeSpan ClockAhead = TimeSpan.Zero;
+    public DateTimeOffset DayOpenedAt;
+
     public FakeFdms()
     {
         PrivateKeyBase64 = Convert.ToBase64String(Key.ExportPkcs8PrivateKey());
@@ -58,7 +62,7 @@ public class FakeFdms : IFdmsClientFactory, IFdmsClient
 
     public void Dispose() { }
 
-    private static ServerResponse Ok(object body) => new("fake", HttpStatusCode.OK, JsonConvert.SerializeObject(body));
+    private ServerResponse Ok(object body) => new("fake", HttpStatusCode.OK, JsonConvert.SerializeObject(body)) { ServerTime = DateTimeOffset.UtcNow + ClockAhead };
     private static ServerResponse Fail(HttpStatusCode code, string errorCode, string title) =>
         new("fake", code, JsonConvert.SerializeObject(new { errorCode, title }));
 
@@ -102,6 +106,9 @@ public class FakeFdms : IFdmsClientFactory, IFdmsClient
         LastFiscalDayNo++;
         DayStatus = FiscalDayStatus.FiscalDayOpened;
         DayOpened = request.FiscalDayOpened.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        DayOpenedAt = request.FiscalDayOpened;
+        // Like ZIMRA, compare against the server's own clock.
+        if ((request.FiscalDayOpened - (DateTimeOffset.UtcNow + ClockAhead)).Duration() > TimeSpan.FromMinutes(5)) Violations.Add("fiscal day opening time is not ZIMRA's time");
         DayReceipts = [];
         return Task.FromResult(Ok(new { operationID = "op", fiscalDayNo = LastFiscalDayNo }));
     }
@@ -163,6 +170,8 @@ public class FakeFdms : IFdmsClientFactory, IFdmsClient
             string? previousHash = previous == null ? null : Convert.ToBase64String(previous.ReceiptDeviceSignature.Hash);
             if (!SignatureValid(ExpectedReceiptSource(r, previousHash), r.ReceiptDeviceSignature)) Violations.Add("RCPT020 invalid signature");
             if (r.ReceiptTaxes.Sum(t => t.SalesAmountWithTax) != r.ReceiptTotal) Violations.Add("RCPT019 total");
+            if (AllReceipts.Any(x => x.InvoiceNo == r.InvoiceNo)) Violations.Add("RCPT013 invoice number is not unique");
+            if (r.ReceiptDate < DayOpenedAt) Violations.Add("RCPT014 receipt date earlier than fiscal day opening");
             if (r.ReceiptPayments.Sum(p => p.PaymentAmount) != r.ReceiptTotal) Violations.Add("RCPT039 payments");
 
             DayReceipts.Add(r);

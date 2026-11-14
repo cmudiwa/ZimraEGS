@@ -175,7 +175,7 @@ public class FiscalFlowTests : IDisposable
         Assert.True(result.Success, string.Join("; ", result.Problems));
         Assert.Equal(ReceiptStatus.Approved, result.Receipt!.Status);
         Assert.Equal(1, _fdms.OpenDayCalls);
-        Assert.Equal("0001-0001", result.Receipt.InvoiceNo);
+        Assert.Equal("12345-0001-0001", result.Receipt.InvoiceNo);
         Assert.Equal(115.00m, result.Receipt.Total);
         Assert.Empty(_fdms.Violations);
 
@@ -190,7 +190,7 @@ public class FiscalFlowTests : IDisposable
         var call = ManagerWriteBack.Invoice(relay, device, result.Receipt);
         Assert.Equal($"http://localhost:55667/api2/sales-invoice-form/{key}", call.ApiUrl);
         var written = JObject.Parse(call.Payload);
-        Assert.Equal("0001-0001", (string?)written["Reference"]);
+        Assert.Equal("12345-0001-0001", (string?)written["Reference"]);
         Assert.Equal("APPROVED", (string?)written["CustomFields2"]!["Strings"]![ManagerCustomField.ApprovalStatusGuid]);
         Assert.StartsWith("https://fdmstest.zimra.co.zw/0000012345", (string?)written["CustomFields2"]!["Strings"]![ManagerCustomField.ReceiptQRCodeGuid]);
         Assert.Equal(1, (int)written["CustomFields2"]!["Decimals"]![ManagerCustomField.ReceiptGlobalNoGuid]!);
@@ -230,7 +230,7 @@ public class FiscalFlowTests : IDisposable
         var next = await RelayAsync(RelayForm(link, Guid.NewGuid().ToString(), SimpleLines()));
         Assert.True(next.result.Success);
         Assert.Equal(2, _fdms.OpenDayCalls);
-        Assert.Equal("0002-0001", next.result.Receipt!.InvoiceNo);
+        Assert.Equal("12345-0002-0001", next.result.Receipt!.InvoiceNo);
         Assert.Equal(4, next.result.Receipt.ReceiptGlobalNo);
         Assert.Empty(_fdms.Violations);
     }
@@ -472,7 +472,7 @@ public class FiscalFlowTests : IDisposable
         Assert.True(result.Success, string.Join("; ", result.Problems));
         Assert.Empty(_fdms.Violations);
         Assert.Equal(1, _fdms.CloseDayCalls);
-        Assert.Equal("0008-0001", result.Receipt!.InvoiceNo);
+        Assert.Equal("12345-0008-0001", result.Receipt!.InvoiceNo);
         Assert.Equal(3, result.Receipt.ReceiptGlobalNo);
 
         // The write-back replaces the key blob in Manager with a link that works on the next relay.
@@ -556,7 +556,7 @@ public class FiscalFlowTests : IDisposable
         var patch = ManagerWriteBack.InvoicePatch(device, result.Receipt!);
         Assert.Equal("PATCH", patch.Method);
         Assert.Equal($"/api3/sales-invoice-form/{key}", patch.ApiUrl);
-        Assert.Equal("0001-0001", (string?)patch.Body!["reference"]);
+        Assert.Equal("12345-0001-0001", (string?)patch.Body!["reference"]);
         Assert.Equal("APPROVED", (string?)patch.Body["customFields2"]!["strings"]![ManagerCustomField.ApprovalStatusGuid]);
         Assert.Equal(1, (int)patch.Body["customFields2"]!["decimals"]![ManagerCustomField.ReceiptGlobalNoGuid]!);
 
@@ -602,6 +602,23 @@ public class FiscalFlowTests : IDisposable
 
         var businessPatch = ManagerWriteBack.BusinessLinkPatch(link, "Demo", "Address");
         Assert.Equal(link, (string?)businessPatch.Body!["customFields2"]!["strings"]![ManagerCustomField.CertificateInfoGuid]);
+    }
+
+    [Fact]
+    public async Task Receipts_are_stamped_with_zimras_clock_not_the_local_one()
+    {
+        // This machine's clock is two hours behind ZIMRA's, for example through a wrong time zone setting.
+        _fdms.ClockAhead = TimeSpan.FromHours(2);
+        string link = await RegisterDeviceAsync();
+
+        var (result, _, _) = await RelayAsync(RelayForm(link, Guid.NewGuid().ToString(), SimpleLines()));
+
+        Assert.True(result.Success, string.Join("; ", result.Problems));
+        var sent = Assert.Single(_fdms.AllReceipts);
+        var zimraNow = DateTimeOffset.UtcNow + _fdms.ClockAhead;
+        Assert.InRange((sent.ReceiptDate - zimraNow).Duration(), TimeSpan.Zero, TimeSpan.FromSeconds(30));
+        Assert.True(sent.ReceiptDate >= _fdms.DayOpenedAt, "the receipt must not be dated before the fiscal day opened");
+        Assert.Empty(_fdms.Violations);
     }
 
     [Fact]

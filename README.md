@@ -111,7 +111,7 @@ Create a credit note that refers to the fiscalised invoice, enter the reason in 
 ---
 
 ## Key Points to Understand
-1. **Invoice Date and Number** are set at fiscalisation: the date is the submission time, the number is `FiscalDay-ReceiptCounter`.
+1. **Invoice Date and Number** are set at fiscalisation: the date is the submission time, the number is `DeviceID-FiscalDay-ReceiptCounter`, which is unique for the taxpayer across all of its devices. Times are taken from ZIMRA's clock, so a slow or wrong clock on the server cannot misdate a receipt.
 2. **Lost connection**: if ZIMRA does not answer, the signed receipt is kept and sent again, unchanged, the next time a document is sent. The chain cannot go out of step.
 3. **Receipts ZIMRA flags** (red or grey validation errors) are recorded by ZIMRA and stay part of the fiscal day. Correct them with a credit note. Such a day may have to be closed in the ZIMRA portal.
 4. **Upgrading from a version that kept the certificate in Manager**: just open the panel on an invoice. The device and its open fiscal day are imported, and the certificate and key are removed from Manager's business data.
