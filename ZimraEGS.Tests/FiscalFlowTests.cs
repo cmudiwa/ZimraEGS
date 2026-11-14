@@ -575,6 +575,7 @@ public class FiscalFlowTests : IDisposable
         Assert.True((bool)patch.Body!["customTheme"]!);
         Assert.Equal(ManagerSetupData.ThemeKey, (string?)patch.Body["customThemeId"]);
         Assert.Equal("FISCAL TAX INVOICE", (string?)patch.Body["customFields2"]!["strings"]![ManagerCustomField.FiscalDocumentGuid]);
+        Assert.Equal("Buyer Ltd\nTIN: 2000000001", (string?)patch.Body["customFields2"]!["strings"]![ManagerCustomField.FiscalBuyerGuid]);
         Assert.Equal($"/api3/sales-invoice-form/{key}", patch.ApiUrl);
         Assert.Equal("12345-0001-0001", (string?)patch.Body!["reference"]);
         Assert.Equal("APPROVED", (string?)patch.Body["customFields2"]!["strings"]![ManagerCustomField.ApprovalStatusGuid]);

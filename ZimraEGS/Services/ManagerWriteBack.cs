@@ -107,6 +107,8 @@ namespace ZimraEGS.Services
                 [ManagerCustomField.DeviceSNGuid] = device.SerialNumber,
                 [ManagerCustomField.FiscalDocumentGuid] = FiscalDocumentTitle(device, row.ReceiptType),
             };
+            strings[ManagerCustomField.FiscalBuyerGuid] = BuyerText(row);
+
             var decimals = new Newtonsoft.Json.Linq.JObject
             {
                 [ManagerCustomField.DeviceIDGuid] = device.DeviceID,
@@ -142,6 +144,34 @@ namespace ZimraEGS.Services
                     ["customFields2"] = new Newtonsoft.Json.Linq.JObject { ["strings"] = strings, ["decimals"] = decimals },
                 },
             };
+        }
+
+        /// <summary>
+        /// The buyer exactly as reported to ZIMRA: name first, then one detail per line.
+        /// Null (which removes the value in Manager) when the receipt carried no buyer.
+        /// </summary>
+        public static string? BuyerText(FiscalReceipt row)
+        {
+            Buyer? buyer;
+            try { buyer = FiscalService.ParseReceipt(row).BuyerData; }
+            catch (JsonException) { return null; }
+            if (buyer == null) return null;
+
+            var address = buyer.BuyerAddress == null ? string.Empty : string.Join(", ",
+                new[] { buyer.BuyerAddress.HouseNo, buyer.BuyerAddress.Street, buyer.BuyerAddress.City, buyer.BuyerAddress.Province }
+                    .Where(x => !string.IsNullOrWhiteSpace(x)));
+
+            var lines = new[]
+            {
+                buyer.BuyerRegisterName,
+                buyer.BuyerTradeName,
+                string.IsNullOrWhiteSpace(buyer.BuyerTIN) ? null : "TIN: " + buyer.BuyerTIN,
+                string.IsNullOrWhiteSpace(buyer.VatNumber) ? null : "VAT: " + buyer.VatNumber,
+                address,
+                buyer.BuyerContacts?.Email,
+                buyer.BuyerContacts?.PhoneNo,
+            };
+            return string.Join("\n", lines.Where(x => !string.IsNullOrWhiteSpace(x)));
         }
 
         /// <summary>The title ZIMRA prescribes for the printed document.</summary>

@@ -34,7 +34,7 @@ namespace ZimraEGS.Services
         /// Increased whenever the records created in Manager change (fields, theme). A business set up with an
         /// older revision is brought up to date the next time its panel is opened.
         /// </summary>
-        public const int Revision = 3;
+        public const int Revision = 4;
 
         public const string ThemeKey = "f43edcbb-2448-4890-bbd2-18f87fdbad13";
 
@@ -85,6 +85,21 @@ namespace ZimraEGS.Services
                 textFieldList.OfType<JObject>().FirstOrDefault(f => (string?)f["Key"] == ManagerCustomField.ApprovalStatusGuid) is JObject statusField &&
                 !textFieldList.Any(f => (string?)f["Key"] == ManagerCustomField.FiscalDocumentGuid))
             {
+                // Customer details are not part of a credit note's printed data in Manager, so the buyer that
+                // was reported to ZIMRA is kept on the document itself.
+                textFieldList.Add(new JObject
+                {
+                    ["DisplayOnView"] = true,
+                    ["Key"] = ManagerCustomField.FiscalBuyerGuid,
+                    ["Name"] = "Fiscal Buyer",
+                    ["Placement"] = statusField["Placement"]?.DeepClone(),
+                    ["Position"] = 88,
+                    ["Size"] = "Large",
+                    ["Type"] = "ParagraphText",
+                    ["LockedForManualEditing"] = true,
+                    ["ExcludeFromCopyingOrCloning"] = true,
+                });
+
                 textFieldList.Add(new JObject
                 {
                     ["DisplayOnView"] = true,

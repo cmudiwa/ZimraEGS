@@ -39,12 +39,16 @@ h1 { text-align: center; font-size: 18px; letter-spacing: 1px; margin: 14px 0 12
 .info b, .credited b { font-weight: bold; }
 .credited { border: 1px solid var(--line); padding: 8px 10px; margin-bottom: 12px; }
 .credited .grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 24px; row-gap: 2px; }
+/* Stated on the cells themselves: tables do not inherit the page font in every rendering mode. */
+table, th, td { font: 12px/1.45 Arial, Helvetica, sans-serif; color: inherit; }
+table { border-spacing: 0; }
+th, .totals tr.strong td, table.lines tr.total td { font-weight: bold; }
 table.lines { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
 table.lines th { border-bottom: 1.5px solid var(--ink); padding: 5px 6px; text-align: left; vertical-align: bottom; }
 table.lines td { border-bottom: 1px solid var(--line); padding: 5px 6px; vertical-align: top; overflow-wrap: anywhere; }
 table.lines tr.total td { font-weight: bold; border-bottom: 0; }
-.end { text-align: right; }
-.center { text-align: center; }
+.end, table.lines th.end, table.lines td.end { text-align: right; }
+.center, table.lines th.center, table.lines td.center { text-align: center; }
 .nowrap { white-space: nowrap; }
 .totals { margin-left: auto; width: 55%; border-collapse: collapse; }
 .totals td { padding: 4px 6px; text-align: right; }
@@ -64,6 +68,7 @@ table.lines tr.total td { font-weight: bold; border-bottom: 0; }
 const F = {
   status: ['fc6f05f9-50c7-46c0-b9f5-7fe0ca83cf2a', 'Approval Status'],
   docType: ['b7c1f0de-3a5e-4d7b-9a53-6f2f0c1e7d10', 'Fiscal Document'],
+  buyer: ['b7c1f0de-3a5e-4d7b-9a53-6f2f0c1e7d11', 'Fiscal Buyer'],
   qr: ['7eaadfa6-1fb9-4dce-9a1c-9d74beb1d0f7', 'Receipt QRCode'],
   code: ['a0454495-cae8-43ef-a418-4dad69427e78', 'Verification Code'],
   date: ['39b3d219-a386-4d9f-b3a0-55968b4bc7b7', 'Receipt Date'],
@@ -175,15 +180,23 @@ function renderDocument(data) {
   if (status === 'REJECTED') main.append(el('div', { class: 'banner bad', text: 'ZIMRA recorded this receipt with validation errors.' }));
 
   // Seller and buyer.
-  const buyerName = field('buyerName');
-  const buyerLines = [
-    field('buyerTrade'),
-    field('buyerTin') ? 'TIN: ' + field('buyerTin') : '',
-    field('buyerVat') ? 'VAT: ' + field('buyerVat') : '',
-    [field('buyerHouse'), field('buyerStreet'), field('buyerCity'), field('buyerProvince')].filter(Boolean).join(', '),
-    field('buyerEmail'), field('buyerPhone'),
-  ].filter(Boolean);
-  const recipient = data.recipient || {};
+  // The buyer as reported to ZIMRA is kept on the document (name first, one detail per line). Documents
+  // fiscalised before that was introduced fall back to the customer's own fields.
+  let buyerName, buyerLines;
+  const reported = field('buyer').split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+  if (reported.length) {
+    buyerName = reported[0];
+    buyerLines = reported.slice(1);
+  } else {
+    buyerName = field('buyerName');
+    buyerLines = [
+      field('buyerTrade'),
+      field('buyerTin') ? 'TIN: ' + field('buyerTin') : '',
+      field('buyerVat') ? 'VAT: ' + field('buyerVat') : '',
+      [field('buyerHouse'), field('buyerStreet'), field('buyerCity'), field('buyerProvince')].filter(Boolean).join(', '),
+      field('buyerEmail'), field('buyerPhone'),
+    ].filter(Boolean);
+  }
   const hasBuyer = buyerName || buyerLines.length;
   main.append(el('div', { class: 'parties' }, [
     el('div', {}, [
@@ -193,16 +206,18 @@ function renderDocument(data) {
     ]),
     hasBuyer ? el('div', {}, [
       el('div', { class: 'label', text: 'BUYER' }),
-      el('div', { class: 'name', text: buyerName || recipient.name || '' }),
+      el('div', { class: 'name', text: buyerName }),
       el('div', { class: 'pre', text: buyerLines.join('\n') }),
     ]) : el('div'),
   ]));
 
   // Receipt information.
   const pair = (label, value) => value ? el('div', {}, [el('b', { text: label + ': ' }), value]) : null;
-  const due = fields.find(f => /due/i.test(f.key || '') && f.text);
+  // Manager's own rows (dates, number, linked invoice) have no custom field key.
+  const isCustom = f => /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(f.key || '');
+  const due = fields.find(f => !isCustom(f) && /due/i.test((f.key || '') + ' ' + (f.label || '')) && f.text);
   if (due) used.add(due);
-  fields.filter(f => f.key && !/^[0-9a-f-]{36}$/i.test(f.key)).forEach(f => used.add(f));   // Manager's own date and number rows
+  fields.filter(f => !isCustom(f)).forEach(f => used.add(f));
   if (fiscalised) {
     const counter = plain(field('counter')), globalNo = plain(field('global'));
     main.append(el('div', { class: 'info' }, [
@@ -215,7 +230,7 @@ function renderDocument(data) {
       due ? pair(due.label, due.text) : null,
     ]));
   } else {
-    main.append(el('div', { class: 'info' }, fields.filter(f => f.key && !/^[0-9a-f-]{36}$/i.test(f.key) && f.text).map(f => pair(f.label, f.text))));
+    main.append(el('div', { class: 'info' }, fields.filter(f => !isCustom(f) && f.text).map(f => pair(f.label, f.text))));
   }
 
   // Credited or debited invoice.
@@ -239,16 +254,25 @@ function renderDocument(data) {
   const alignClass = c => /end|right/i.test(String(c.align)) ? 'end' : /center/i.test(String(c.align)) ? 'center' : '';
   if (table.description) main.append(el('p', { class: 'pre', text: table.description }));
   if (columns.length) {
+    // Manager heads the quantity column with the unit of measure ("PCE"). ZIMRA's layout calls it Qty;
+    // the unit moves next to each quantity instead.
+    const priceIndex = columns.findIndex(c => /^unit price$/i.test(c.label || ''));
+    const qtyIndex = priceIndex > 0 ? priceIndex - 1 : -1;
+    const unit = qtyIndex >= 0 && !/^(qty|quantity)$/i.test(columns[qtyIndex].label || '') ? (columns[qtyIndex].label || '') : '';
+    const heading = (c, i) => i === qtyIndex ? 'Qty' : c.label;
+
     const lines = el('table', { class: 'lines' });
-    lines.append(el('thead', {}, [el('tr', {}, columns.map(c => el('th', { class: alignClass(c), text: c.label })))]));
+    lines.append(el('thead', {}, [el('tr', {}, columns.map((c, i) => el('th', { class: alignClass(c) || null, text: heading(c, i) })))]));
     const body = el('tbody');
     for (const row of table.rows || []) {
-      if (!row.cells) continue;
-      body.append(el('tr', { class: row.isTotalRow ? 'total' : null }, row.cells.map((cell, i) => {
+      // Column sums (such as the total quantity) are not part of a fiscal invoice.
+      if (!row.cells || row.isTotalRow) continue;
+      body.append(el('tr', {}, row.cells.map((cell, i) => {
         const c = columns[i] || {};
         const td = el('td', { class: [alignClass(c), c.nowrap ? 'nowrap' : ''].join(' ').trim() || null });
         if (cell && cell.image && cell.image.url) td.append(el('img', { src: cell.image.url, alt: '', style: 'max-height:40px' }));
-        td.append((cell && cell.text) || '');
+        const text = (cell && cell.text) || '';
+        td.append(i === qtyIndex && unit && text ? text + ' ' + unit : text);
         return td;
       })));
     }
