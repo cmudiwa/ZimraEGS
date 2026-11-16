@@ -84,19 +84,19 @@ table.dataTable thead th {
 }
 
 .btn-bd-primary {
-    --bd-violet-bg: #712cf9;
-    --bd-violet-rgb: 112.520718, 44.062154, 249.437846;
+    --bd-violet-bg: #b71c1c;
+    --bd-violet-rgb: 183, 28, 28;
     --bs-btn-font-weight: 600;
     --bs-btn-color: var(--bs-white);
     --bs-btn-bg: var(--bd-violet-bg);
     --bs-btn-border-color: var(--bd-violet-bg);
     --bs-btn-hover-color: var(--bs-white);
-    --bs-btn-hover-bg: #6528e0;
-    --bs-btn-hover-border-color: #6528e0;
+    --bs-btn-hover-bg: #961616;
+    --bs-btn-hover-border-color: #961616;
     --bs-btn-focus-shadow-rgb: var(--bd-violet-rgb);
     --bs-btn-active-color: var(--bs-btn-hover-color);
-    --bs-btn-active-bg: #5a23c8;
-    --bs-btn-active-border-color: #5a23c8;
+    --bs-btn-active-bg: #8b0000;
+    --bs-btn-active-border-color: #8b0000;
 }
 
 .bd-mode-toggle {
@@ -296,3 +296,55 @@ input[readonly] {
 .pg .tabs a { padding: 4px 12px; border-radius: 999px; border: 1px solid var(--bs-border-color, #dee2e6); text-decoration: none; color: inherit; font-size: .9rem; }
 .pg .tabs a.on { background: var(--bs-secondary-bg, #e9ecef); font-weight: 600; }
 .pg .scroll { overflow-x: auto; }
+
+/* Red theme, in Manager.io's colours. */
+:root, [data-bs-theme=light] {
+    --brand: #b71c1c;
+    --brand-hover: #961616;
+    --brand-rgb: 183, 28, 28;
+    --bs-primary: var(--brand);
+    --bs-primary-rgb: var(--brand-rgb);
+    --bs-link-color: var(--brand);
+    --bs-link-color-rgb: var(--brand-rgb);
+    --bs-link-hover-color: var(--brand-hover);
+    --bs-link-hover-color-rgb: 150, 22, 22;
+    --bs-focus-ring-color: rgba(var(--brand-rgb), .25);
+}
+[data-bs-theme=dark] {
+    --brand: #ef5350;
+    --brand-hover: #f47c7a;
+    --brand-rgb: 239, 83, 80;
+    --bs-primary: var(--brand);
+    --bs-primary-rgb: var(--brand-rgb);
+    --bs-link-color: var(--brand);
+    --bs-link-color-rgb: var(--brand-rgb);
+    --bs-link-hover-color: var(--brand-hover);
+    --bs-link-hover-color-rgb: 244, 124, 122;
+    --bs-focus-ring-color: rgba(var(--brand-rgb), .3);
+}
+.brand-bar { background: linear-gradient(90deg, #8b0000, #c62828); }
+.brand-bar .btn-outline-light { --bs-btn-hover-color: #8b0000; }
+.btn-primary {
+    --bs-btn-bg: #b71c1c; --bs-btn-border-color: #b71c1c;
+    --bs-btn-hover-bg: #961616; --bs-btn-hover-border-color: #961616;
+    --bs-btn-active-bg: #8b0000; --bs-btn-active-border-color: #8b0000;
+    --bs-btn-disabled-bg: #b71c1c; --bs-btn-disabled-border-color: #b71c1c;
+    --bs-btn-focus-shadow-rgb: 183, 28, 28;
+}
+.btn-outline-primary {
+    --bs-btn-color: var(--brand); --bs-btn-border-color: var(--brand);
+    --bs-btn-hover-color: #fff; --bs-btn-hover-bg: #b71c1c; --bs-btn-hover-border-color: #b71c1c;
+    --bs-btn-active-color: #fff; --bs-btn-active-bg: #8b0000; --bs-btn-active-border-color: #8b0000;
+    --bs-btn-focus-shadow-rgb: 183, 28, 28;
+}
+.form-control:focus, .form-select:focus { border-color: rgba(var(--brand-rgb), .6); box-shadow: 0 0 0 .25rem rgba(var(--brand-rgb), .2); }
+.form-check-input:checked { background-color: var(--brand); border-color: var(--brand); }
+.footer { border-top: 3px solid #b71c1c; }
+.pg .tabs a.on { background: rgba(var(--brand-rgb), .12); border-color: rgba(var(--brand-rgb), .5); color: var(--brand); }
+.pg h1, .home h1 { color: var(--brand); }
+
+/* "Works with Manager.io" */
+.works-with { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; color: inherit; font-size: .95rem; }
+.works-with img { width: 28px; height: 28px; border-radius: 6px; }
+.brand-bar .works-with { color: #fff; opacity: .95; }
+.brand-bar .works-with:hover { opacity: 1; text-decoration: underline; }
