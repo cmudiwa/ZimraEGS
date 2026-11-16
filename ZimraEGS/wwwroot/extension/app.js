@@ -141,6 +141,267 @@
         } catch (e) { console.warn(e); }
     }
 
+
+    // ---------- HS codes for items ----------
+
+    var HS_FIELD = '329de867-9cf1-4dfe-8b06-5084bce788c7';
+    var ITEM_KINDS = [
+        { kind: 'inventory', label: 'Inventory item', batch: '/api4/inventory-item-batch', form: '/api3/inventory-item-form/', name: ['itemName', 'ItemName'], code: ['itemCode', 'ItemCode'] },
+        { kind: 'non-inventory', label: 'Non-inventory item', batch: '/api4/non-inventory-item-batch', form: '/api3/non-inventory-item-form/', name: ['name', 'Name'], code: ['code', 'Code'] }
+    ];
+    var LIST_PLACEMENTS = [
+        { key: '2b1f6c1e-5a0e-4a53-9e0b-0f6a3c5d7a03', placement: 'inventory-items' },
+        { key: '2b1f6c1e-5a0e-4a53-9e0b-0f6a3c5d7a04', placement: 'non-inventory-items' }
+    ];
+
+    function pick(obj, names) { for (var i = 0; i < names.length; i++) if (obj && obj[names[i]] !== undefined && obj[names[i]] !== null) return obj[names[i]]; return undefined; }
+    function businessQuery() { return state.page && state.page.business ? '&business=' + encodeURIComponent(state.page.business) : ''; }
+
+    // Every record of one kind, page by page.
+    async function listAll(batchPath) {
+        var all = [], skip = 0, size = 500;
+        for (;;) {
+            var page = await manager('GET', batchPath + '?pageSize=' + size + '&skip=' + skip + businessQuery(), null, true);
+            var items = (page && (page.items || page.Items)) || [];
+            all = all.concat(items);
+            if (items.length < size) return all;
+            skip += size;
+        }
+    }
+
+    function formatCode(c) { return /^\d{8}$/.test(c) ? c.slice(0, 4) + '.' + c.slice(4, 6) + '.' + c.slice(6) : c; }
+
+    // ZIMRA: 4 or 8 digits; all 8 when the item is zero-rated or exempt.
+    function checkCode(value, row, known) {
+        var v = (value || '').trim();
+        if (!v) return { kind: 'bad', text: 'No HS code. ZIMRA needs one on every line of a VAT registered business.' };
+        if (!/^\d+$/.test(v) || (v.length !== 4 && v.length !== 8)) return { kind: 'bad', text: 'An HS code has 4 or 8 digits, without dots or spaces.' };
+        if (row.zero && v.length !== 8) return { kind: 'bad', text: 'Zero-rated or exempt: ZIMRA needs all 8 digits.' };
+        var info = known[v];
+        if (info && info.known === false) return { kind: 'warn', text: 'Not in ZIMRA\'s tariff list. Check the code.' };
+        if (info && info.known) return { kind: 'ok', text: info.description ? info.description : 'Heading: ' + (info.heading || '').toLowerCase() };
+        return { kind: 'ok', text: '' };
+    }
+
+    async function renderHsTool() {
+        document.querySelector('main').classList.add('wide');
+        subtitle.textContent = 'HS codes for items';
+        show(card(el('div', { class: 'small', text: 'Reading your items from Manager…' })));
+
+        var taxCodes = {};
+        (await listAll('/api4/tax-code-batch')).forEach(function (t) {
+            var v = t.item || t.Item || {};
+            var taxRate = pick(v, ['taxRate', 'TaxRate']), rate = Number(pick(v, ['rate', 'Rate']) || 0);
+            taxCodes[String(t.key || t.Key).toLowerCase()] = { name: pick(v, ['name', 'Name']) || '', zero: taxRate === 0 || taxRate === 'ZeroRate' || rate === 0 };
+        });
+
+        var rows = [];
+        for (var k = 0; k < ITEM_KINDS.length; k++) {
+            var kind = ITEM_KINDS[k];
+            (await listAll(kind.batch)).forEach(function (it) {
+                var v = it.item || it.Item || {};
+                if (pick(v, ['inactive', 'Inactive'])) return;
+                var cf = pick(v, ['customFields2', 'CustomFields2']) || {};
+                var strings = pick(cf, ['strings', 'Strings']) || {};
+                var hs = '';
+                Object.keys(strings).forEach(function (key) { if (key.toLowerCase() === HS_FIELD) hs = strings[key] || ''; });
+                var taxKey = pick(v, ['hasDefaultTaxCode', 'HasDefaultTaxCode']) ? String(pick(v, ['defaultTaxCode', 'DefaultTaxCode']) || '').toLowerCase() : '';
+                var tax = taxCodes[taxKey];
+                rows.push({
+                    key: it.key || it.Key, kind: kind, name: pick(v, kind.name) || '(no name)', itemCode: pick(v, kind.code) || '',
+                    tax: tax ? tax.name : '', zero: tax ? tax.zero : false, original: String(hs).trim(), value: String(hs).trim(), selected: false
+                });
+            });
+        }
+        rows.sort(function (a, b) { return a.name.localeCompare(b.name); });
+
+        var known = {};
+        async function lookup(codes) {
+            var unknown = codes.filter(function (c) { return c && !(c in known); });
+            if (!unknown.length) return;
+            var r = await server('/extension/api/hscodes/lookup', { codes: unknown });
+            Object.keys(r.codes || {}).forEach(function (c) { known[c] = r.codes[c]; });
+        }
+        await lookup(rows.map(function (r) { return r.value; }));
+
+        var onlyNeeding = rows.some(function (r) { return checkCode(r.value, r, known).kind !== 'ok'; });
+        var chosen = null;
+
+        // ---- finder: search the tariff, then apply a code to the ticked items
+        var findInput = el('input', { type: 'search', placeholder: 'Search the tariff, e.g. cement, tyres, 2523', autocomplete: 'off' });
+        var findResults = el('div', { class: 'suggest' });
+        var applyButton = el('button', { class: 'primary', text: 'Apply to ticked items', disabled: true });
+        var chosenText = el('span', { class: 'small', text: 'Pick a code from the search results.' });
+
+        function results(list, onPick) {
+            if (!list.length) return [el('div', { class: 'small', text: 'Nothing found. Try another word, or a services code (99001000, 99002000, 99003000).' })];
+            return list.map(function (c) {
+                return el('button', { type: 'button', class: 'pick', on: { click: function () { onPick(c); } } }, [
+                    el('span', { class: 'c', text: formatCode(c.code) }), c.description,
+                    el('span', { class: 'h', text: (c.heading || '').toLowerCase() })
+                ]);
+            });
+        }
+
+        var searchTimer = null;
+        findInput.addEventListener('input', function () {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(async function () {
+                var q = findInput.value.trim();
+                if (!q) { findResults.replaceChildren(); return; }
+                var r = await fetch('/extension/api/hscodes?limit=12&q=' + encodeURIComponent(q)).then(function (x) { return x.json(); });
+                findResults.replaceChildren.apply(findResults, results(r.results || [], function (c) {
+                    chosen = c;
+                    chosenText.textContent = 'Chosen: ' + formatCode(c.code) + ' ' + c.description;
+                    updateBar();
+                }));
+            }, 250);
+        });
+
+        // ---- the item table
+        var summary = el('div', { class: 'small' });
+        var onlyBox = el('input', { type: 'checkbox' });
+        onlyBox.checked = onlyNeeding;
+        var allBox = el('input', { type: 'checkbox', title: 'Tick all shown' });
+        var tbody = el('tbody');
+        var saveButton = el('button', { class: 'primary', text: 'Save changes', disabled: true });
+        var saveStatus = el('span', { class: 'small' });
+
+        function changed() { return rows.filter(function (r) { return r.value !== r.original; }); }
+        function updateBar() {
+            var ticked = rows.filter(function (r) { return r.selected; }).length;
+            applyButton.disabled = !chosen || !ticked;
+            applyButton.textContent = chosen ? 'Apply ' + formatCode(chosen.code) + ' to ' + ticked + ' ticked item' + (ticked === 1 ? '' : 's') : 'Apply to ticked items';
+            var n = changed().length;
+            saveButton.disabled = !n;
+            saveButton.textContent = n ? 'Save ' + n + ' change' + (n === 1 ? '' : 's') + ' to Manager' : 'Save changes';
+            var counts = { ok: 0, warn: 0, bad: 0 };
+            rows.forEach(function (r) { counts[checkCode(r.value, r, known).kind]++; });
+            summary.textContent = rows.length + ' items: ' + counts.ok + ' ready, ' + counts.warn + ' to check, ' + counts.bad + ' missing or not valid.';
+        }
+
+        function renderRows() {
+            var shown = rows.filter(function (r) { return !onlyBox.checked || checkCode(r.value, r, known).kind !== 'ok' || r.value !== r.original; });
+            tbody.replaceChildren.apply(tbody, shown.map(function (r) {
+                var box = el('input', { type: 'checkbox' });
+                box.checked = r.selected;
+                box.addEventListener('change', function () { r.selected = box.checked; updateBar(); });
+                var input = el('input', { type: 'text', value: r.value, inputmode: 'numeric', 'aria-label': 'HS code for ' + r.name });
+                var status = el('div', { class: 'status' });
+                var suggestions = el('div', { class: 'suggest' });
+                function paint() {
+                    var c = checkCode(r.value, r, known);
+                    status.className = 'status ' + c.kind;
+                    status.textContent = (r.value !== r.original ? 'Changed. ' : '') + c.text;
+                }
+                input.addEventListener('input', async function () {
+                    r.value = input.value.trim();
+                    paint(); updateBar();
+                    if (/^\d{4}$|^\d{8}$/.test(r.value)) { await lookup([r.value]); paint(); updateBar(); }
+                });
+                var suggest = el('button', {
+                    type: 'button', text: 'Suggest', on: {
+                        click: async function () {
+                            suggest.disabled = true;
+                            var r2 = await fetch('/extension/api/hscodes?limit=6&q=' + encodeURIComponent(r.name)).then(function (x) { return x.json(); });
+                            suggestions.replaceChildren.apply(suggestions, results(r2.results || [], async function (c) {
+                                r.value = c.code; input.value = c.code; suggestions.replaceChildren();
+                                await lookup([c.code]); paint(); updateBar();
+                            }));
+                            suggest.disabled = false;
+                        }
+                    }
+                });
+                paint();
+                return el('tr', {}, [
+                    el('td', {}, [box]),
+                    el('td', {}, [el('div', { text: r.name }), el('div', { class: 'small', text: [r.kind.label, r.itemCode, r.tax].filter(Boolean).join(' · ') })]),
+                    el('td', {}, [el('div', { class: 'toolbar' }, [input, suggest]), status, suggestions])
+                ]);
+            }));
+            if (!shown.length) tbody.replaceChildren(el('tr', {}, [el('td', { colspan: '3', text: rows.length ? 'Every item has a valid HS code.' : 'No active inventory or non-inventory items found.' })]));
+            allBox.checked = false;
+            updateBar();
+        }
+
+        onlyBox.addEventListener('change', renderRows);
+        allBox.addEventListener('change', function () {
+            var shown = rows.filter(function (r) { return !onlyBox.checked || checkCode(r.value, r, known).kind !== 'ok' || r.value !== r.original; });
+            shown.forEach(function (r) { r.selected = allBox.checked; });
+            renderRows(); allBox.checked = shown.length > 0 && shown.every(function (r) { return r.selected; });
+        });
+        applyButton.addEventListener('click', async function () {
+            if (!chosen) return;
+            await lookup([chosen.code]);
+            rows.forEach(function (r) { if (r.selected) { r.value = chosen.code; r.selected = false; } });
+            renderRows();
+        });
+        saveButton.addEventListener('click', async function () {
+            var todo = changed();
+            var blocked = todo.filter(function (r) { return checkCode(r.value, r, known).kind === 'bad' && r.value; });
+            if (blocked.length && !confirm(blocked.length + ' of the changed codes are not valid for ZIMRA. Save anyway?')) return;
+            saveButton.disabled = true;
+            var done = 0, failed = [];
+            for (var i = 0; i < todo.length; i++) {
+                var r = todo[i];
+                saveStatus.textContent = 'Saving ' + (i + 1) + ' of ' + todo.length + '…';
+                var strings = {}; strings[HS_FIELD] = r.value ? r.value : null;   // null removes the value
+                try {
+                    await manager('PATCH', r.kind.form + r.key, { customFields2: { strings: strings } });
+                    r.original = r.value; done++;
+                } catch (e) { failed.push(r.name + ': ' + e.message); }
+            }
+            saveStatus.textContent = done + ' saved' + (failed.length ? ', ' + failed.length + ' failed: ' + failed.join('; ') : '.');
+            renderRows();
+        });
+
+        var addButtons = el('button', {
+            type: 'button', text: 'Add a ZIMRA button to the item lists', on: {
+                click: async function () {
+                    addButtons.disabled = true;
+                    try {
+                        for (var i = 0; i < LIST_PLACEMENTS.length; i++) {
+                            await manager('PUT', '/api4/extension', {
+                                key: LIST_PLACEMENTS[i].key, business: state.page.business,
+                                value: { name: 'ZIMRA HS codes', source: 0, endpoint: location.origin + '/extension', placement: LIST_PLACEMENTS[i].placement }
+                            });
+                        }
+                        addButtons.textContent = 'Added: open Inventory Items or Non-inventory Items and click "ZIMRA HS codes".';
+                    } catch (e) { addButtons.textContent = 'Could not add the buttons: ' + e.message; }
+                }
+            }
+        });
+
+        var back = state.page && ['/sales-invoice-view', '/credit-note-view'].indexOf(state.page.path) >= 0
+            ? el('button', { type: 'button', text: 'Back', on: { click: function () { document.querySelector('main').classList.remove('wide'); route(state.server); } } })
+            : el('button', { type: 'button', text: 'Back to Manager', on: { click: backToInvoice } });
+
+        show(
+            card(
+                el('p', { class: 'small', style: 'margin-top:0', text: 'Find the HS code of each item in ZIMRA\'s tariff and save it on the item. Every invoice line then carries it. Standard-rated items need at least 4 digits; zero-rated and exempt items need all 8.' }),
+                el('label', { text: 'Find an HS code' }), findInput, findResults,
+                el('div', { class: 'row' }, [chosenText, applyButton])
+            ),
+            card(
+                el('div', { class: 'toolbar', style: 'justify-content:space-between' }, [summary, el('label', {}, [onlyBox, 'Only items that need attention'])]),
+                el('table', { class: 'hs-table', style: 'margin-top:10px' }, [
+                    el('thead', {}, [el('tr', {}, [el('th', {}, [allBox]), el('th', { text: 'Item' }), el('th', { text: 'HS code' })])]),
+                    tbody
+                ]),
+                el('div', { class: 'row' }, [back, el('div', { class: 'toolbar' }, [saveStatus, saveButton])]),
+                el('details', {}, [el('summary', { text: 'More' }), el('div', { style: 'margin-top:10px' }, [addButtons]),
+                    el('p', { class: 'small', text: 'Codes come from ZIMRA\'s Tariff Handbook (S.I. 203 of 2022). If unsure, confirm a code on ZIMRA\'s E-Tariff tool or with ZIMRA.' })])
+            )
+        );
+        renderRows();
+    }
+
+    function hsToolCard() {
+        return el('details', {}, [el('summary', { text: 'HS codes for items' }),
+            el('p', { class: 'small', style: 'margin:10px 0', text: 'Find and set the HS code of your inventory and non-inventory items.' }),
+            el('button', { type: 'button', text: 'Open the HS code tool', on: { click: function () { renderHsTool().catch(fail); } } })]);
+    }
+
     // ---------- reading the open document ----------
 
     async function readDocument() {
@@ -309,7 +570,7 @@
             ]),
             el('p', { class: 'small', style: 'margin:12px 0 0', text: 'Sending cannot be undone. The date and number of the document are set by fiscalisation.' }),
             el('div', { class: 'row' }, [status, send]),
-            settingsCard(), taxCodesCard()
+            settingsCard(), taxCodesCard(), hsToolCard()
         ), dayCard());
     }
 
@@ -319,8 +580,12 @@
             el('h2', { style: 'font-size:16px;margin:0 0 10px', text: s.title || 'This document cannot be sent yet' }),
             el('ul', {}, (s.problems || []).map(function (p) { return el('li', { text: p }); })),
             el('p', { class: 'small', text: 'Nothing was changed. Fix these points in Manager and open this panel again.' }),
-            el('div', { class: 'row' }, [el('button', { text: 'Back to the document', on: { click: backToInvoice } }), el('button', { text: 'Check again', on: { click: start } })]),
-            settingsCard(), taxCodesCard()
+            el('div', { class: 'row' }, [el('button', { text: 'Back to the document', on: { click: backToInvoice } }),
+                el('div', { class: 'toolbar' }, [
+                    (s.problems || []).some(function (p) { return /HS Code/i.test(p); })
+                        ? el('button', { class: 'primary', text: 'Fix HS codes on items', on: { click: function () { renderHsTool().catch(fail); } } }) : null,
+                    el('button', { text: 'Check again', on: { click: start } })])]),
+            settingsCard(), taxCodesCard(), hsToolCard()
         ), dayCard());
     }
 
@@ -352,6 +617,7 @@
         children.push(el('div', { class: 'row' }, buttons));
         children.push(settingsCard());
         children.push(taxCodesCard());
+        children.push(hsToolCard());
         show(card.apply(null, children), dayCard());
     }
 
@@ -497,9 +763,13 @@
             var query = body.query || {};
             state.page = { path: body.path || '', key: query.key || query.Key || null, business: query.business || query.Business || null };
 
+            if (['/inventory-items', '/non-inventory-items'].indexOf(state.page.path) >= 0) {
+                return await renderHsTool();
+            }
             if (['/sales-invoice-view', '/credit-note-view'].indexOf(state.page.path) < 0 || !state.page.key) {
                 subtitle.textContent = 'Open a document first';
-                return show(card(note('info', 'Open a sales invoice or a credit note in Manager and click the ZIMRA button there.')));
+                return show(card(note('info', 'Open a sales invoice or a credit note in Manager and click the ZIMRA button there.'),
+                    el('div', { class: 'row' }, [el('span'), el('button', { text: 'Set HS codes on items', on: { click: function () { renderHsTool().catch(fail); } } })])));
             }
 
             await load();

@@ -73,6 +73,7 @@ namespace ZimraEGS
 
             builder.Services.AddSingleton<IFdmsClientFactory, FdmsClientFactory>();
             builder.Services.AddSingleton<DeviceLocks>();
+            builder.Services.AddSingleton<HsCodeCatalog>();
             builder.Services.AddScoped<DeviceStore>();
             builder.Services.AddScoped<FiscalService>();
             builder.Services.AddHostedService<AutoCloseDayService>();

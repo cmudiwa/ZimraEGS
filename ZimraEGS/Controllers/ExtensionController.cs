@@ -19,10 +19,12 @@ namespace ZimraEGS.Controllers
         private readonly DeviceStore _store;
         private readonly FiscalService _fiscal;
         private readonly IWebHostEnvironment _environment;
+        private readonly HsCodeCatalog _hsCodes;
         private readonly ILogger<ExtensionController> _logger;
 
-        public ExtensionController(DeviceStore store, FiscalService fiscal, IWebHostEnvironment environment, ILogger<ExtensionController> logger)
+        public ExtensionController(DeviceStore store, FiscalService fiscal, IWebHostEnvironment environment, HsCodeCatalog hsCodes, ILogger<ExtensionController> logger)
         {
+            _hsCodes = hsCodes;
             _store = store;
             _fiscal = fiscal;
             _environment = environment;
@@ -320,6 +322,46 @@ namespace ZimraEGS.Controllers
                 names = calls.Select(c => (string?)c.Body?["name"]).ToList(),
                 calls = CallsOf(calls),
             });
+        }
+
+        private static object Describe(HsCode c) => new { code = c.Code, description = c.Description, heading = c.Heading };
+
+        /// <summary>Finds HS codes by code or by words, for the HS code picker.</summary>
+        [HttpGet("extension/api/hscodes")]
+        public IActionResult SearchHsCodes([FromQuery] string? q, [FromQuery] int limit = 30)
+        {
+            return Json(new { results = _hsCodes.Search(q ?? string.Empty, limit).Select(Describe) });
+        }
+
+        /// <summary>
+        /// Looks up the codes items already carry: what each one stands for, and whether it is in ZIMRA's tariff.
+        /// Accepts 8-digit codes and 4-digit headings.
+        /// </summary>
+        [HttpPost("extension/api/hscodes/lookup")]
+        public async Task<IActionResult> LookupHsCodes()
+        {
+            var body = await ReadBodyAsync();
+            var result = new Dictionary<string, object>();
+            foreach (var token in (body["codes"] as JArray) ?? [])
+            {
+                string raw = ((string?)token ?? string.Empty).Trim();
+                string digits = new string(raw.Where(char.IsDigit).ToArray());
+                if (result.ContainsKey(raw) || raw.Length == 0) continue;
+
+                if (digits.Length == 8 && digits.Length == raw.Replace(".", "").Replace(" ", "").Length && _hsCodes.Find(digits) is { } found)
+                {
+                    result[raw] = new { known = true, description = found.Description, heading = found.Heading };
+                }
+                else if (digits.Length == 4 && raw.All(char.IsDigit) && _hsCodes.HeadingTitle(digits) is { } title)
+                {
+                    result[raw] = new { known = true, description = (string?)null, heading = title };
+                }
+                else
+                {
+                    result[raw] = new { known = false, description = (string?)null, heading = (string?)null };
+                }
+            }
+            return Json(new { codes = result });
         }
 
         [HttpPost("extension/api/settings")]

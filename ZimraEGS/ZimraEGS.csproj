@@ -24,6 +24,7 @@
   <ItemGroup>
     <EmbeddedResource Include="cfData.json" />
     <EmbeddedResource Include="Themes\zimra-invoice.html" LogicalName="ZimraEGS.zimra-invoice.html" />
+    <EmbeddedResource Include="Resources\hs-codes.json" LogicalName="ZimraEGS.hs-codes.json" />
   </ItemGroup>
 
 </Project>

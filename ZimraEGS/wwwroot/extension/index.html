@@ -54,6 +54,21 @@
         summary { cursor: pointer; color: var(--muted); font-size: 13px; }
         .steps { list-style: none; padding: 0; margin: 12px 0 0; }
         .hidden { display: none !important; }
+        .hs-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        .hs-table th, .hs-table td { border-bottom: 1px solid var(--line); padding: 7px 6px; vertical-align: top; }
+        .hs-table th { width: auto; }
+        .hs-table input[type=text] { width: 9.5em; font-family: ui-monospace, Consolas, monospace; }
+        .hs-table input[type=checkbox] { width: auto; }
+        .status { font-size: 12px; margin-top: 4px; }
+        .status.ok { color: var(--ok); } .status.warn { color: var(--warn); } .status.bad { color: var(--bad); }
+        .suggest { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+        .pick { text-align: left; font-size: 13px; padding: 6px 8px; }
+        .pick .c { font-family: ui-monospace, Consolas, monospace; font-weight: 600; margin-right: 6px; }
+        .pick .h { display: block; color: var(--muted); font-size: 12px; }
+        .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+        .toolbar label { display: inline-flex; gap: 6px; align-items: center; margin: 0; color: var(--text); font-size: 14px; }
+        .toolbar label input { width: auto; }
+        main.wide { max-width: 980px; }
     </style>
 </head>
 <body>

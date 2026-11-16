@@ -96,6 +96,11 @@ If something is missing, the panel lists what to fix in plain words and nothing 
 
 Opening the panel on a document that is already fiscalised shows its receipt and never sends it twice.
 
+#### HS codes for items
+ZIMRA needs an HS code on every invoice line of a VAT registered business: at least 4 digits on standard-rated lines, all 8 on zero-rated and exempt lines. The panel has an **HS codes for items** tool (open it from the panel, or from the "Fix HS codes on items" button when an invoice is refused for a missing code). It lists your inventory and non-inventory items with their HS codes, flags missing and invalid ones, suggests codes from each item's name, lets you search ZIMRA's tariff and apply a code to many items at once, and saves the codes on the items in Manager. No items are created.
+
+The list comes from ZIMRA's Tariff Handbook (S.I. 203 of 2022) plus ZIMRA's general codes for services (99001000, 99002000, 99003000); see `tools/hs-codes`.
+
 #### When ZIMRA changes your taxes
 ZIMRA can change the taxes allowed for a device, for example when a VAT rate changes. The panel then says which tax is no longer allowed. Open **Tax codes** in the panel and click **Update tax codes in Manager**, then use the updated codes.
 
