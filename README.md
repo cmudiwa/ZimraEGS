@@ -137,6 +137,29 @@ Settings, in `appsettings.json` or as environment variables (for example `Billin
 
 When the server is reachable from the internet, serve it over https only, so passwords and sign-in cookies are never sent in the clear.
 
+## Data protection (POTRAZ)
+
+Customers' details, taxpayer details and the buyer details on fiscal documents are personal data under the Cyber and Data Protection Act [Chapter 12:07] and its regulations (SI 155 of 2024), administered by POTRAZ. The service supports what the law asks of you:
+
+- **Privacy notice** at `/privacy`, linked from every page, sign-up and the panel. It is filled from the `Privacy` settings below.
+- **Consent.** Sign-up needs the customer to agree to the notice; the version and time are recorded. When `Privacy:NoticeVersion` changes, customers are asked to agree again on their account page.
+- **Customers' rights.** On `/account` a customer corrects their details, downloads everything held about them (JSON), and deletes their account. Administrators do the same for requests by e-mail or letter (`/admin`, open the customer).
+- **Deletion and retention.** Deleting an account removes it and the customer's e-mail from the security log. Devices, fiscal documents and payments are kept, unlinked, because tax law requires them (`Privacy:RecordsRetentionYears`). The security log and server log files are deleted after `Privacy:AuditRetentionDays` and `Privacy:LogRetentionDays`.
+- **Security log** at `/admin/privacy`: sign-ins, refused sign-ins, account changes, data downloads and every administrator action on a customer, with time and IP address.
+- **Security.** Passwords are salted hashes with lock-out; device keys are encrypted at rest; account and admin pages are not cached and cannot be framed. Set `Security:HttpsOnly` to `true` once the server is served over https: http is then redirected, HSTS is sent and the sign-in cookie is https-only.
+
+What only you can do, listed with reminders on `/admin/privacy`: apply to POTRAZ for a data controller licence (Form DP1) and renew it yearly, appoint a data protection officer and notify POTRAZ (Form DP2), report a breach to POTRAZ within 24 hours (Form DP3), and keep the server and backups in Zimbabwe or check with POTRAZ before hosting abroad. This is a guide, not legal advice.
+
+| Setting | Meaning |
+| --- | --- |
+| `Privacy:ControllerName`, `ControllerAddress`, `ContactEmail`, `ContactPhone` | Your business, shown as the data controller. |
+| `Privacy:DpoName`, `Privacy:DpoEmail` | Your data protection officer. |
+| `Privacy:PotrazLicenceNumber` | Your POTRAZ data controller licence. |
+| `Privacy:HostingLocation` | Where the server and its data are, e.g. `Harare, Zimbabwe`. |
+| `Privacy:NoticeVersion` | Change it when the notice changes in substance. |
+| `Privacy:RecordsRetentionYears`, `AuditRetentionDays`, `LogRetentionDays` | How long records, the security log and log files are kept. |
+| `Security:HttpsOnly` | `true` once the server is served over https. |
+
 ## Key Points to Understand
 1. **Invoice Date and Number** are set at fiscalisation: the date is the submission time, the number is `DeviceID-FiscalDay-ReceiptCounter`, which is unique for the taxpayer across all of its devices. Times are taken from ZIMRA's clock, so a slow or wrong clock on the server cannot misdate a receipt.
 2. **Lost connection**: if ZIMRA does not answer, the signed receipt is kept and sent again, unchanged, the next time a document is sent. The chain cannot go out of step.

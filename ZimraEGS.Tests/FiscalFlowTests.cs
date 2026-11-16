@@ -827,6 +827,71 @@ public class FiscalFlowTests : IDisposable
     }
 
     [Fact]
+    public async Task A_customer_can_download_their_data_and_delete_their_account()
+    {
+        var (link, rowId) = await LiveDeviceAsync(paidUntilUtc: DateTime.UtcNow.AddDays(30));
+        Assert.True((await SendAsync(link)).Success);
+        var (_, _, db, billing) = BillingScope();
+        var privacy = new PrivacyService(db, Options.Create(new PrivacyOptions { ControllerName = "Operator Ltd" }));
+        int accountId = (await db.Devices.AsNoTracking().FirstAsync(d => d.Id == rowId)).AccountId!.Value;
+        string email = (await db.Accounts.AsNoTracking().FirstAsync(a => a.Id == accountId)).Email;
+        await billing.RecordPaymentAsync(rowId, 1, 0, 25m, "USD", "EcoCash 123", "", "admin@example.com");
+        await privacy.LogAsync(email, "signed in", accountId, "", "10.0.0.1");
+
+        var export = JObject.Parse(await privacy.ExportAsync(accountId));
+        Assert.Equal(email, (string?)export["account"]!["email"]);
+        Assert.Single((JArray)export["devices"]!);
+        Assert.Single((JArray)export["payments"]!);
+        Assert.Single((JArray)export["fiscalDocuments"]!);
+        Assert.Single((JArray)export["securityLog"]!);
+        Assert.DoesNotContain("PRIVATE KEY", export.ToString());
+        Assert.DoesNotContain("AQAAAA", export.ToString());   // no password hash
+
+        await privacy.DeleteAccountAsync(accountId, email, "10.0.0.1");
+        db.ChangeTracker.Clear();
+        Assert.False(await db.Accounts.AnyAsync(a => a.Id == accountId));
+        var device = await db.Devices.FirstAsync(d => d.Id == rowId);
+        Assert.Null(device.AccountId);
+        // Fiscal and payment records stay; the e-mail is gone from the security log.
+        Assert.Equal(1, await db.Receipts.CountAsync(r => r.DeviceRowId == rowId));
+        Assert.Equal(1, await db.SubscriptionPayments.CountAsync(p => p.DeviceRowId == rowId));
+        Assert.False(await db.AuditEvents.AnyAsync(e => e.Actor == email));
+        Assert.Equal(2, await db.AuditEvents.CountAsync(e => e.AccountId == accountId));
+        // An unlinked live device no longer sends.
+        Assert.Equal("This device is not linked to an account", (await SendAsync(link)).ProblemTitle);
+    }
+
+    [Fact]
+    public async Task Sign_up_records_consent_and_old_log_entries_and_files_are_deleted()
+    {
+        var (_, _, db, billing) = BillingScope();
+        var (account, _) = await billing.CreateAccountAsync("c@example.com", "a long password", "C", "", "2026-11-16");
+        Assert.Equal("2026-11-16", account!.ConsentVersion);
+        Assert.NotNull(account.ConsentUtc);
+
+        var privacy = new PrivacyService(db, Options.Create(new PrivacyOptions { AuditRetentionDays = 30, LogRetentionDays = 10 }));
+        Assert.Contains(privacy.MissingSettings(), m => m.StartsWith("Privacy:PotrazLicenceNumber"));
+        var now = DateTime.UtcNow;
+        db.AuditEvents.Add(new AuditEvent { Utc = now.AddDays(-31), Actor = "old", Action = "signed in" });
+        db.AuditEvents.Add(new AuditEvent { Utc = now.AddDays(-1), Actor = "new", Action = "signed in" });
+        await db.SaveChangesAsync();
+
+        string logs = Path.Combine(Path.GetTempPath(), "zimraegs-logs-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(logs);
+        string oldLog = Path.Combine(logs, "log-2026-01-01.log"), newLog = Path.Combine(logs, "log-2026-11-16.log");
+        File.WriteAllText(oldLog, "x"); File.SetLastWriteTimeUtc(oldLog, now.AddDays(-11));
+        File.WriteAllText(newLog, "x");
+        try
+        {
+            Assert.Equal(2, await privacy.PurgeAsync(logs, now));
+            Assert.Equal(new[] { "new" }, await db.AuditEvents.Select(e => e.Actor).ToArrayAsync());
+            Assert.False(File.Exists(oldLog));
+            Assert.True(File.Exists(newLog));
+        }
+        finally { Directory.Delete(logs, true); }
+    }
+
+    [Fact]
     public async Task A_wrong_link_secret_is_not_accepted()
     {
         string link = await RegisterDeviceAsync();

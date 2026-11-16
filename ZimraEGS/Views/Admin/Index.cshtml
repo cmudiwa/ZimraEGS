@@ -2,7 +2,7 @@
 @{ ViewData["Title"] = "Admin"; }
 <div class="pg">
     <h1>Admin</h1>
-    <p class="sub">Customers, devices and subscriptions. Record a payment on a device's page when you receive it.</p>
+    <p class="sub">Customers, devices and subscriptions. Record a payment on a device's page when you receive it. · <a asp-action="Privacy">Data protection and security log</a></p>
     @if (!string.IsNullOrEmpty(Model.Message)) { <div class="msg ok">@Model.Message</div> }
 
     <section class="panel">

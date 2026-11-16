@@ -13,6 +13,10 @@
         <input class="form-control" id="Phone" name="Phone" value="@Model.Phone" autocomplete="tel" />
         <label for="Password">Password (at least @ZimraEGS.Services.BillingService.MinimumPasswordLength characters)</label>
         <input class="form-control" id="Password" name="Password" type="password" required minlength="@ZimraEGS.Services.BillingService.MinimumPasswordLength" autocomplete="new-password" />
+        <div class="form-check mt-3">
+            <input class="form-check-input" type="checkbox" id="Agree" name="Agree" value="true" required @(Model.Agree ? "checked" : "") />
+            <label class="form-check-label" for="Agree" style="display:inline;margin:0;color:inherit">I have read the <a href="/privacy" target="_blank">privacy notice</a> and agree to my data being used as it describes.</label>
+        </div>
         <button class="btn btn-primary mt-3 w-100" type="submit">Create account</button>
     </form>
     <p class="muted">Already have an account? <a asp-action="SignIn">Sign in</a></p>

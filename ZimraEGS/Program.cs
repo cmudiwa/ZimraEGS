@@ -71,12 +71,17 @@ namespace ZimraEGS
             builder.Services.Configure<FiscalServiceOptions>(builder.Configuration.GetSection("Fiscal"));
             builder.Services.Configure<AutoCloseDayOptions>(builder.Configuration.GetSection("AutoCloseDay"));
             builder.Services.Configure<BillingOptions>(builder.Configuration.GetSection("Billing"));
+            builder.Services.Configure<PrivacyOptions>(builder.Configuration.GetSection("Privacy"));
+            bool httpsOnly = builder.Configuration.GetValue<bool>("Security:HttpsOnly");
 
             builder.Services.AddSingleton<IFdmsClientFactory, FdmsClientFactory>();
             builder.Services.AddSingleton<DeviceLocks>();
             builder.Services.AddSingleton<HsCodeCatalog>();
             builder.Services.AddScoped<DeviceStore>();
             builder.Services.AddScoped<BillingService>();
+            builder.Services.AddScoped<PrivacyService>();
+            builder.Services.AddSingleton(new LogDirectory(logDirectory));
+            builder.Services.AddHostedService<PrivacyMaintenanceService>();
             builder.Services.AddScoped<FiscalService>();
 
             // Customer and admin sign-in for the account pages. The Manager panel does not use it: it works with
@@ -90,7 +95,8 @@ namespace ZimraEGS
                     o.Cookie.Name = "zimraegs.account";
                     o.Cookie.HttpOnly = true;
                     o.Cookie.SameSite = SameSiteMode.Lax;
-                    o.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+                    // With Security:HttpsOnly the sign-in cookie is never sent over plain http.
+                    o.Cookie.SecurePolicy = httpsOnly ? CookieSecurePolicy.Always : CookieSecurePolicy.SameAsRequest;
                     o.ExpireTimeSpan = TimeSpan.FromHours(12);
                     o.SlidingExpiration = true;
                 });
@@ -111,11 +117,29 @@ namespace ZimraEGS
             if (!app.Environment.IsDevelopment())
             {
                 app.UseExceptionHandler("/Home/Error");
-                // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
-                app.UseHsts();
             }
 
-            app.UseHttpsRedirection();
+            if (httpsOnly)
+            {
+                app.UseHsts();
+                app.UseHttpsRedirection();
+            }
+
+            // Basic protection for the pages that show customers' data. The extension pages are shown inside
+            // Manager, in a frame, so only the account and admin pages refuse to be framed.
+            app.Use(async (context, next) =>
+            {
+                var headers = context.Response.Headers;
+                headers["X-Content-Type-Options"] = "nosniff";
+                headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+                var path = context.Request.Path;
+                if (path.StartsWithSegments("/account") || path.StartsWithSegments("/admin"))
+                {
+                    headers["X-Frame-Options"] = "DENY";
+                    headers["Cache-Control"] = "no-store";
+                }
+                await next();
+            });
             app.UseStaticFiles(new StaticFileOptions
             {
                 // The panel's files must not be served stale from a browser cache after an update.

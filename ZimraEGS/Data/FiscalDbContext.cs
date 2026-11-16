@@ -90,8 +90,28 @@ namespace ZimraEGS.Data
         public DateTime? LockedUntilUtc { get; set; }
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
         public DateTime? LastSignInUtc { get; set; }
+        /// <summary>Version of the privacy notice the customer agreed to, and when.</summary>
+        public string ConsentVersion { get; set; } = string.Empty;
+        public DateTime? ConsentUtc { get; set; }
 
         public List<Device> Devices { get; set; } = [];
+    }
+
+    /// <summary>
+    /// Security log: sign-ins, changes to accounts and what administrators did with customers' data.
+    /// Kept for Privacy:AuditRetentionDays, then deleted.
+    /// </summary>
+    public class AuditEvent
+    {
+        public long Id { get; set; }
+        public DateTime Utc { get; set; } = DateTime.UtcNow;
+        /// <summary>Who did it: an account e-mail, "system", or "anonymous".</summary>
+        public string Actor { get; set; } = string.Empty;
+        public string Action { get; set; } = string.Empty;
+        /// <summary>The customer account the event is about, if any.</summary>
+        public int? AccountId { get; set; }
+        public string Detail { get; set; } = string.Empty;
+        public string IpAddress { get; set; } = string.Empty;
     }
 
     /// <summary>A payment recorded by hand by an administrator. Extends one device's paid period.</summary>
@@ -169,10 +189,12 @@ namespace ZimraEGS.Data
         public DbSet<FiscalReceipt> Receipts => Set<FiscalReceipt>();
         public DbSet<Account> Accounts => Set<Account>();
         public DbSet<SubscriptionPayment> SubscriptionPayments => Set<SubscriptionPayment>();
+        public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<Account>(e => e.HasIndex(a => a.Email).IsUnique());
+            modelBuilder.Entity<AuditEvent>(e => { e.HasIndex(a => a.Utc); e.HasIndex(a => a.AccountId); });
             modelBuilder.Entity<SubscriptionPayment>(e =>
             {
                 e.HasOne(p => p.Device).WithMany().HasForeignKey(p => p.DeviceRowId);

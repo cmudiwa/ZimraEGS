@@ -1,0 +1,108 @@
+@model PrivacyPageModel
+@{
+    ViewData["Title"] = "Privacy notice";
+    var o = Model.Options;
+    string controller = string.IsNullOrWhiteSpace(o.ControllerName) ? "the operator of this service" : o.ControllerName;
+    string contact = !string.IsNullOrWhiteSpace(o.DpoEmail) ? o.DpoEmail : o.ContactEmail;
+}
+<div class="pg">
+    @if (ViewData["Deleted"] is true) { <div class="msg ok" role="status">Your account has been deleted.</div> }
+    <h1>Privacy notice</h1>
+    <p class="sub">How @controller handles personal data in this fiscalisation service, as required by the Cyber and Data Protection Act [Chapter 12:07]. Version @o.NoticeVersion.</p>
+
+    <section class="panel">
+        <h2>Who is responsible</h2>
+        <p style="margin:0">
+            <strong>@(char.ToUpperInvariant(controller[0]) + controller[1..])</strong> is the data controller for this service.
+            @if (!string.IsNullOrWhiteSpace(o.ControllerAddress)) { <br />@o.ControllerAddress }
+            @if (!string.IsNullOrWhiteSpace(o.ContactEmail)) { <br /><a href="mailto:@o.ContactEmail">@o.ContactEmail</a> }
+            @if (!string.IsNullOrWhiteSpace(o.ContactPhone)) { <span> · @o.ContactPhone</span> }
+        </p>
+        @if (!string.IsNullOrWhiteSpace(o.DpoName) || !string.IsNullOrWhiteSpace(o.DpoEmail))
+        {
+            <p style="margin:10px 0 0">Data protection officer: @o.DpoName @if (!string.IsNullOrWhiteSpace(o.DpoEmail)) { <a href="mailto:@o.DpoEmail">@o.DpoEmail</a> }</p>
+        }
+        @if (!string.IsNullOrWhiteSpace(o.PotrazLicenceNumber))
+        {
+            <p style="margin:10px 0 0">Data controller licence issued by POTRAZ: @o.PotrazLicenceNumber</p>
+        }
+    </section>
+
+    <section class="panel">
+        <h2>What we hold, and why</h2>
+        <div class="scroll">
+        <table class="t">
+            <thead><tr><th>Data</th><th>Why</th><th>Legal basis</th><th>Kept for</th></tr></thead>
+            <tbody>
+                <tr>
+                    <td><strong>Your account:</strong> business name, e-mail, phone, password (stored only as a one-way hash), when you agreed to this notice</td>
+                    <td>To sign you in, link your devices and run your subscription</td>
+                    <td>Your consent, and the contract with you</td>
+                    <td>Until you delete the account</td>
+                </tr>
+                <tr>
+                    <td><strong>Your fiscal device:</strong> device ID, serial number, its private key (encrypted), and the taxpayer details ZIMRA holds for it: name, TIN, VAT number, branch address and contacts</td>
+                    <td>To sign and send your fiscal documents to ZIMRA</td>
+                    <td>Legal obligation to fiscalise sales; the contract with you</td>
+                    <td>As long as tax law requires fiscal records to be kept (@o.RecordsRetentionYears years)</td>
+                </tr>
+                <tr>
+                    <td><strong>Fiscal documents:</strong> each invoice, credit note and debit note sent, exactly as signed, including the buyer details you entered (name, TIN, VAT number, address, contacts)</td>
+                    <td>Required by ZIMRA: documents are reported to it and must be reproducible</td>
+                    <td>Legal obligation. For your buyers' details we act on your instructions, as your processor</td>
+                    <td>@o.RecordsRetentionYears years</td>
+                </tr>
+                <tr>
+                    <td><strong>Payments:</strong> amount, period paid for and payment reference</td>
+                    <td>To run your subscription and keep accounting records</td>
+                    <td>Contract; legal obligation to keep accounting records</td>
+                    <td>@o.RecordsRetentionYears years</td>
+                </tr>
+                <tr>
+                    <td><strong>Security log:</strong> sign-ins, refused sign-ins, changes to your account and what administrators did with it, with the IP address</td>
+                    <td>To protect accounts and investigate misuse or a breach</td>
+                    <td>Legitimate interest in keeping the service secure</td>
+                    <td>@o.AuditRetentionDays days; server log files @o.LogRetentionDays days</td>
+                </tr>
+            </tbody>
+        </table>
+        </div>
+        <p class="muted" style="margin:10px 0 0">We do not sell personal data, use it for advertising or build profiles. We collect only what the service needs.</p>
+    </section>
+
+    <section class="panel">
+        <h2>Who receives it</h2>
+        <ul class="muted" style="margin:0;padding-left:1.1rem">
+            <li><strong>ZIMRA</strong> receives your fiscal documents, as the law requires.</li>
+            <li><strong>Manager.io</strong> (your accounting program) receives the fiscal details written back on each document. That data is in your own Manager business.</li>
+            <li><strong>The hosting provider</strong> of this server stores the data on our behalf@(string.IsNullOrWhiteSpace(o.HostingLocation) ? "." : ", in " + o.HostingLocation + ".")</li>
+            <li>Nobody else, unless a law or a court requires it.</li>
+        </ul>
+    </section>
+
+    <section class="panel">
+        <h2>Cookies</h2>
+        <p style="margin:0" class="muted">One cookie keeps you signed in to your account. It is needed for the service, holds no tracking data and ends when you sign out or after 12 hours without use. Your choice of light or dark theme is kept in your browser only. There are no advertising or analytics cookies.</p>
+    </section>
+
+    <section class="panel">
+        <h2>Your rights</h2>
+        <ul style="margin:0;padding-left:1.1rem">
+            <li><strong>See your data.</strong> Download everything we hold about you from <a href="/account">your account page</a>.</li>
+            <li><strong>Correct it.</strong> Change your name and phone on your account page, or ask us.</li>
+            <li><strong>Delete it.</strong> Delete your account on your account page. Fiscal documents and payment records are kept for as long as tax law requires, and are then deleted.</li>
+            <li><strong>Object or withdraw consent</strong> at any time, by deleting your account or writing to us. Withdrawing consent does not affect what was done before.</li>
+            <li><strong>Complain</strong> to us@(string.IsNullOrWhiteSpace(contact) ? "" : " at " + contact), or to the Data Protection Authority, POTRAZ (<a href="https://www.potraz.gov.zw" target="_blank" rel="noopener">potraz.gov.zw</a>).</li>
+        </ul>
+    </section>
+
+    <section class="panel">
+        <h2>How we protect it</h2>
+        <p class="muted" style="margin:0">Passwords are stored only as salted one-way hashes, and accounts lock after five wrong passwords. Device keys are encrypted at rest. Administrators' access to customers' data is logged. If a breach puts your data at risk, we notify POTRAZ within 24 hours of finding out and tell you without delay.</p>
+    </section>
+
+    <section class="panel">
+        <h2>Changes</h2>
+        <p class="muted" style="margin:0">When this notice changes in substance, its version changes and you are asked to agree again the next time you open your account page.</p>
+    </section>
+</div>

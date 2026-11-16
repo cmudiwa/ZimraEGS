@@ -12,6 +12,14 @@
         </div>
     </div>
     @if (!string.IsNullOrEmpty(Model.Message)) { <div class="msg ok" role="status">@Model.Message</div> }
+    @if (!string.IsNullOrEmpty(Model.Error)) { <div class="msg bad" role="alert">@Model.Error</div> }
+    @if (Model.NeedsConsent)
+    {
+        <form class="msg warn" asp-action="Consent" method="post" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+            <span style="flex:1;min-width:220px">The <a href="/privacy" target="_blank">privacy notice</a> has changed since you last agreed to it. Please read it.</span>
+            <button class="btn btn-primary btn-sm" type="submit">I agree</button>
+        </form>
+    }
 
     <section class="panel">
         <h2>Your devices</h2>
@@ -70,11 +78,36 @@
     </section>
 
     <section class="panel">
+        <h2>Your details</h2>
+        <form asp-action="Details" method="post" class="grid2">
+            <div><label for="name">Business name</label><input class="form-control" id="name" name="name" value="@Model.Account.Name" required autocomplete="organization" /></div>
+            <div><label for="phone">Phone</label><input class="form-control" id="phone" name="phone" value="@Model.Account.Phone" autocomplete="tel" /></div>
+            <div style="align-self:end"><button class="btn btn-outline-primary mt-3" type="submit">Save</button></div>
+        </form>
+        <p class="muted" style="margin:10px 0 0">To change the e-mail address, contact us.</p>
+    </section>
+
+    <section class="panel">
         <h2>Change password</h2>
         <form asp-action="ChangePassword" method="post" class="grid2">
             <div><label for="current">Current password</label><input class="form-control" id="current" name="current" type="password" required autocomplete="current-password" /></div>
             <div><label for="replacement">New password</label><input class="form-control" id="replacement" name="replacement" type="password" required minlength="@ZimraEGS.Services.BillingService.MinimumPasswordLength" autocomplete="new-password" /></div>
             <div style="align-self:end"><button class="btn btn-outline-primary mt-3" type="submit">Change password</button></div>
         </form>
+    </section>
+
+    <section class="panel">
+        <h2>Your data</h2>
+        <p class="muted">See the <a href="/privacy">privacy notice</a> for what we hold and why. You agreed to version @(string.IsNullOrEmpty(Model.Account.ConsentVersion) ? "-" : Model.Account.ConsentVersion)@(Model.Account.ConsentUtc is { } c ? " on " + c.AddHours(2).ToString("d MMM yyyy") : "").</p>
+        <p><a class="btn btn-outline-primary" asp-action="Export">Download my data</a></p>
+        <details>
+            <summary class="muted" style="cursor:pointer">Delete my account</summary>
+            <p class="muted" style="margin:10px 0">Your account and your e-mail in the security log are deleted, and you are signed out. Your devices stop sending live documents until they are linked to an account again. Fiscal documents and payment records stay, because tax law requires them to be kept.</p>
+            <form asp-action="Delete" method="post" class="grid2" onsubmit="return confirm('Delete your account? This cannot be undone.');">
+                <div><label for="delpw">Password</label><input class="form-control" id="delpw" name="password" type="password" required autocomplete="current-password" /></div>
+                <div><label for="delconfirm">Type DELETE to confirm</label><input class="form-control" id="delconfirm" name="confirm" required autocomplete="off" /></div>
+                <div style="align-self:end"><button class="btn btn-outline-danger mt-3" type="submit">Delete account</button></div>
+            </form>
+        </details>
     </section>
 </div>

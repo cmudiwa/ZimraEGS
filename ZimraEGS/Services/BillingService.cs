@@ -120,7 +120,7 @@ namespace ZimraEGS.Services
 
         public const int MinimumPasswordLength = 10;
 
-        public async Task<(Account? account, string? error)> CreateAccountAsync(string email, string password, string name, string phone)
+        public async Task<(Account? account, string? error)> CreateAccountAsync(string email, string password, string name, string phone, string? consentVersion = null)
         {
             email = NormaliseEmail(email);
             if (!System.Text.RegularExpressions.Regex.IsMatch(email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$")) return (null, "Enter a valid e-mail address.");
@@ -128,7 +128,11 @@ namespace ZimraEGS.Services
             if (string.IsNullOrWhiteSpace(name)) return (null, "Enter the business name.");
             if (await _db.Accounts.AnyAsync(a => a.Email == email)) return (null, "There is already an account with this e-mail address. Sign in instead.");
 
-            var account = new Account { Email = email, Name = name.Trim(), Phone = (phone ?? string.Empty).Trim() };
+            var account = new Account
+            {
+                Email = email, Name = name.Trim(), Phone = (phone ?? string.Empty).Trim(),
+                ConsentVersion = consentVersion ?? string.Empty, ConsentUtc = consentVersion != null ? DateTime.UtcNow : null,
+            };
             account.PasswordHash = _hasher.HashPassword(account, password!);
             _db.Accounts.Add(account);
             await _db.SaveChangesAsync();

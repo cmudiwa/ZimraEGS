@@ -23,6 +23,13 @@ namespace ZimraEGS.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<DateTime?>("ConsentUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ConsentVersion")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("CreatedUtc")
                         .HasColumnType("TEXT");
 
@@ -57,6 +64,43 @@ namespace ZimraEGS.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("Accounts");
+                });
+
+            modelBuilder.Entity("ZimraEGS.Data.AuditEvent", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("AccountId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Actor")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Detail")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("IpAddress")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("Utc")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountId");
+
+                    b.HasIndex("Utc");
+
+                    b.ToTable("AuditEvents");
                 });
 
             modelBuilder.Entity("ZimraEGS.Data.Device", b =>

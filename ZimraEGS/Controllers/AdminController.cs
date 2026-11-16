@@ -14,15 +14,20 @@ namespace ZimraEGS.Controllers
     public class AdminController : Controller
     {
         private readonly BillingService _billing;
+        private readonly PrivacyService _privacy;
         private readonly FiscalDbContext _db;
+        private readonly IConfiguration _config;
 
-        public AdminController(BillingService billing, FiscalDbContext db)
+        public AdminController(BillingService billing, PrivacyService privacy, FiscalDbContext db, IConfiguration config)
         {
             _billing = billing;
+            _privacy = privacy;
             _db = db;
+            _config = config;
         }
 
         private string AdminEmail => User.FindFirstValue(ClaimTypes.Email) ?? "admin";
+        private string? Ip => HttpContext.Connection.RemoteIpAddress?.ToString();
 
         [HttpGet("")]
         public async Task<IActionResult> Index(string filter = "attention", string? message = null)
@@ -87,6 +92,8 @@ namespace ZimraEGS.Controllers
             try
             {
                 var payment = await _billing.RecordPaymentAsync(id, months, extraDays, parsed, currency ?? "", reference ?? "", note ?? "", AdminEmail);
+                var paid = await _db.Devices.AsNoTracking().FirstAsync(d => d.Id == id);
+                await _privacy.LogAsync(AdminEmail, "payment recorded", paid.AccountId, $"device {paid.DeviceID}: {months} month(s) {extraDays} day(s), {payment.Currency} {payment.Amount}", Ip);
                 return RedirectToAction(nameof(Device), new { id, message = $"Payment recorded. Paid until {payment.PeriodToUtc.AddHours(2):d MMMM yyyy}." });
             }
             catch (ArgumentException ex)
@@ -110,20 +117,67 @@ namespace ZimraEGS.Controllers
             var account = await _db.Accounts.FirstOrDefaultAsync(a => a.Id == accountId);
             if (device == null || account == null) return NotFound();
             await _billing.LinkDeviceAsync(device, account);
+            await _privacy.LogAsync(AdminEmail, "device linked", account.Id, $"device {device.DeviceID}", Ip);
             return RedirectToAction(nameof(Device), new { id, message = $"Linked to {account.Name}." });
         }
 
         [HttpGet("account/{id:int}")]
-        public async Task<IActionResult> Account(int id)
+        public async Task<IActionResult> Account(int id, string? message)
         {
             string? newPassword = TempData["NewPassword"] as string;
             var account = await _db.Accounts.AsNoTracking().Include(a => a.Devices).FirstOrDefaultAsync(a => a.Id == id);
             if (account == null) return NotFound();
+            await _privacy.LogAsync(AdminEmail, "account viewed", id, "", Ip);
             return View(new AdminAccountModel
             {
                 Account = account,
                 Devices = account.Devices.OrderBy(d => d.DeviceID).Select(d => (d, _billing.StatusOf(d))).ToList(),
                 NewPassword = newPassword,
+                Message = message,
+            });
+        }
+
+        /// <summary>A customer's data, for a request received by e-mail or letter.</summary>
+        [HttpGet("account/{id:int}/export")]
+        public async Task<IActionResult> ExportAccount(int id)
+        {
+            var account = await _db.Accounts.AsNoTracking().FirstOrDefaultAsync(a => a.Id == id);
+            if (account == null) return NotFound();
+            await _privacy.LogAsync(AdminEmail, "data exported for customer", id, "", Ip);
+            string json = await _privacy.ExportAsync(id);
+            return File(System.Text.Encoding.UTF8.GetBytes(json), "application/json", $"customer-{id}-data-{DateTime.UtcNow:yyyy-MM-dd}.json");
+        }
+
+        /// <summary>Deletes a customer's account at their request.</summary>
+        [HttpPost("account/{id:int}/delete"), ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteAccount(int id, string? confirm)
+        {
+            var account = await _db.Accounts.AsNoTracking().FirstOrDefaultAsync(a => a.Id == id);
+            if (account == null) return NotFound();
+            if (!string.Equals((confirm ?? "").Trim(), "DELETE", StringComparison.Ordinal))
+                return RedirectToAction(nameof(Account), new { id, message = "Type DELETE in capitals to confirm. Nothing was deleted." });
+            await _privacy.DeleteAccountAsync(id, AdminEmail, Ip);
+            return RedirectToAction(nameof(Index), new { filter = "all", message = $"The account of {account.Name} was deleted. Its devices are no longer linked to an account." });
+        }
+
+        /// <summary>Data protection: what is still to be set up, and the security log.</summary>
+        [HttpGet("privacy")]
+        public async Task<IActionResult> Privacy(string? q)
+        {
+            var events = _db.AuditEvents.AsNoTracking();
+            if (!string.IsNullOrWhiteSpace(q))
+            {
+                string term = q.Trim().ToLowerInvariant();
+                events = events.Where(e => e.Actor.ToLower().Contains(term) || e.Action.ToLower().Contains(term) || e.Detail.ToLower().Contains(term) || e.IpAddress.Contains(term));
+            }
+            return View(new AdminPrivacyModel
+            {
+                Options = _privacy.Options,
+                Missing = _privacy.MissingSettings(),
+                HttpsOnly = _config.GetValue<bool>("Security:HttpsOnly"),
+                IsHttps = Request.IsHttps,
+                Events = await events.OrderByDescending(e => e.Utc).Take(300).ToListAsync(),
+                Search = q,
             });
         }
 
@@ -132,6 +186,7 @@ namespace ZimraEGS.Controllers
         {
             if (!await _db.Accounts.AnyAsync(a => a.Id == id)) return NotFound();
             string password = await _billing.ResetPasswordAsync(id);
+            await _privacy.LogAsync(AdminEmail, "password reset by administrator", id, "", Ip);
             // Shown once, on this page only; give it to the customer and ask them to change it.
             TempData["NewPassword"] = password;
             return RedirectToAction(nameof(Account), new { id });

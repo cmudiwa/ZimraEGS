@@ -1,0 +1,71 @@
+@model AdminPrivacyModel
+@{ ViewData["Title"] = "Data protection"; var o = Model.Options; }
+<div class="pg">
+    <p class="muted" style="margin:0 0 6px"><a asp-action="Index">Admin</a> / Data protection</p>
+    <h1>Data protection</h1>
+    <p class="sub">What the Cyber and Data Protection Act and POTRAZ's regulations (SI 155 of 2024) ask of you as the operator of this service, and the record of who did what with customers' data.</p>
+
+    <section class="panel">
+        <h2>Settings for the privacy notice</h2>
+        @if (Model.Missing.Count == 0)
+        {
+            <div class="msg ok" style="margin:0">All set. The <a href="/privacy" target="_blank">privacy notice</a> names your business, your data protection officer and your POTRAZ licence.</div>
+        }
+        else
+        {
+            <div class="msg warn" style="margin:0 0 8px">Fill these in <code>appsettings.json</code> (section <code>Privacy</code>) so the <a href="/privacy" target="_blank">privacy notice</a> is complete:</div>
+            <ul class="muted" style="margin:0">@foreach (var m in Model.Missing) { <li>@m</li> }</ul>
+        }
+        @if (!Model.HttpsOnly)
+        {
+            <div class="msg warn" style="margin:10px 0 0">
+                <code>Security:HttpsOnly</code> is off. Once this server is reachable from the internet, serve it over https and turn it on,
+                so passwords and sign-in cookies are never sent unencrypted.@(Model.IsHttps ? "" : " This page was opened over plain http.")
+            </div>
+        }
+    </section>
+
+    <section class="panel">
+        <h2>Done outside this program</h2>
+        <ol style="margin:0;padding-left:1.2rem">
+            <li><strong>Licence.</strong> Apply to POTRAZ for a data controller licence (Form DP1) and renew it every year before it expires. Put the number in <code>Privacy:PotrazLicenceNumber</code>.</li>
+            <li><strong>Data protection officer.</strong> Appoint one and notify POTRAZ (Form DP2). Put their name and e-mail in <code>Privacy:DpoName</code> and <code>Privacy:DpoEmail</code>.</li>
+            <li><strong>Breaches.</strong> If customers' data is lost, stolen or reached by someone who should not have it, notify POTRAZ within 24 hours of finding out (Form DP3), and tell the customers affected. The security log below helps you work out what happened.</li>
+            <li><strong>Where the data is.</strong> Keep the server and its backups in Zimbabwe, or check with POTRAZ before using a host abroad: sending personal data out of the country is restricted. Put the location in <code>Privacy:HostingLocation</code>.</li>
+            <li><strong>Backups.</strong> The data folder holds customers' details and devices' keys. Keep backups encrypted and somewhere only you can reach.</li>
+            <li><strong>Requests.</strong> Customers can download and delete their own data on their account page. Requests by e-mail or letter: open the customer under Admin.</li>
+        </ol>
+        <p class="muted" style="margin:10px 0 0">This list is a guide, not legal advice. POTRAZ's forms and current requirements: <a href="https://www.potraz.gov.zw" target="_blank" rel="noopener">potraz.gov.zw</a>.</p>
+    </section>
+
+    <section class="panel">
+        <h2>Security log</h2>
+        <p class="muted">Sign-ins, changes to accounts and administrators' actions. Kept for @o.AuditRetentionDays days. Server log files are kept for @o.LogRetentionDays days.</p>
+        <form method="get" style="display:flex;gap:8px;margin-bottom:10px">
+            <input class="form-control" name="q" value="@Model.Search" placeholder="Search e-mail, action or IP address" />
+            <button class="btn btn-outline-primary" type="submit">Search</button>
+        </form>
+        @if (Model.Events.Count == 0) { <p class="muted" style="margin:0">No entries.</p> }
+        else
+        {
+            <div class="scroll">
+            <table class="t">
+                <thead><tr><th>When (Harare)</th><th>Who</th><th>What</th><th>Details</th><th>IP address</th></tr></thead>
+                <tbody>
+                @foreach (var e in Model.Events)
+                {
+                    <tr>
+                        <td style="white-space:nowrap">@e.Utc.AddHours(2).ToString("d MMM yyyy HH:mm")</td>
+                        <td>@e.Actor</td>
+                        <td>@e.Action @if (e.AccountId != null) { <a class="muted" asp-action="Account" asp-route-id="@e.AccountId">#@e.AccountId</a> }</td>
+                        <td>@e.Detail</td>
+                        <td>@e.IpAddress</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+            </div>
+            @if (Model.Events.Count == 300) { <p class="muted" style="margin:8px 0 0">The latest 300 entries. Search to find older ones.</p> }
+        }
+    </section>
+</div>

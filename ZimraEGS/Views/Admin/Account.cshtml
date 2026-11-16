@@ -4,6 +4,8 @@
     <p class="muted" style="margin:0 0 6px"><a asp-action="Index">Admin</a> / Customer</p>
     <h1>@a.Name</h1>
     <p class="sub">@a.Email @(string.IsNullOrEmpty(a.Phone) ? "" : "· " + a.Phone) · since @a.CreatedUtc.AddHours(2).ToString("d MMM yyyy")</p>
+    @if (!string.IsNullOrEmpty(Model.Message)) { <div class="msg warn" role="status">@Model.Message</div> }
+    <p class="muted" style="margin-top:-10px">Agreed to privacy notice: @(string.IsNullOrEmpty(a.ConsentVersion) ? "not recorded" : a.ConsentVersion + " on " + a.ConsentUtc?.AddHours(2).ToString("d MMM yyyy"))</p>
     @if (Model.NewPassword != null)
     {
         <div class="msg warn" role="status">New password: <code style="font-size:1rem">@Model.NewPassword</code><br />Give it to the customer and ask them to change it after signing in. It is not shown again.</div>
@@ -37,5 +39,16 @@
         <form asp-action="ResetPassword" asp-route-id="@a.Id" method="post" onsubmit="return confirm('Set a new password for this customer?');">
             <button class="btn btn-outline-danger" type="submit">Set a new password</button>
         </form>
+    </section>
+
+    <section class="panel">
+        <h2>Requests about their data</h2>
+        <p class="muted">When the customer asks by e-mail or letter for a copy of their data, or for their account to be deleted. Check that the request really comes from them first. Answer within the time the law allows.</p>
+        <p><a class="btn btn-outline-primary" asp-action="ExportAccount" asp-route-id="@a.Id">Download their data (JSON)</a></p>
+        <form asp-action="DeleteAccount" asp-route-id="@a.Id" method="post" class="grid2" onsubmit="return confirm('Delete this account? This cannot be undone.');">
+            <div><label for="confirm">Type DELETE to confirm</label><input class="form-control" id="confirm" name="confirm" autocomplete="off" required /></div>
+            <div style="align-self:end"><button class="btn btn-outline-danger mt-3" type="submit">Delete account</button></div>
+        </form>
+        <p class="muted" style="margin:10px 0 0">Deleting removes the account and the customer's e-mail from the security log. Their devices, fiscal documents and payments are kept, unlinked, because tax law requires those records to be kept for the period the law sets.</p>
     </section>
 </div>

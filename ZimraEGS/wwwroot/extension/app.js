@@ -679,7 +679,8 @@
             el('div', { class: 'grid' }, [
                 el('div', {}, [el('label', { for: 'accountEmail', text: 'Account e-mail' }), f.accountEmail]),
                 el('div', {}, [el('label', { for: 'accountPassword', text: 'Account password' }), f.accountPassword])
-            ])
+            ]),
+            el('p', { class: 'small' }, ['How your data is used: ', el('a', { href: location.origin + '/privacy', target: '_blank', rel: 'noopener', text: 'privacy notice' }), '.'])
         ]);
         f.environment.addEventListener('change', function () { accountBox.className = f.environment.value === 'Production' ? 'full' : 'full hidden'; });
         f.defaultMoneyType = el('select', { id: 'setupMoneyType' }, MONEY_TYPES.map(function (m) { return el('option', { value: m[0], text: m[1] }); }));
