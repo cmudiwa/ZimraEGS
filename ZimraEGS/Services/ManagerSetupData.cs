@@ -34,7 +34,7 @@ namespace ZimraEGS.Services
         /// Increased whenever the records created in Manager change (fields, theme). A business set up with an
         /// older revision is brought up to date the next time its panel is opened.
         /// </summary>
-        public const int Revision = 4;
+        public const int Revision = 5;
 
         public const string ThemeKey = "f43edcbb-2448-4890-bbd2-18f87fdbad13";
 
@@ -94,6 +94,21 @@ namespace ZimraEGS.Services
                     ["Name"] = "Fiscal Buyer",
                     ["Placement"] = statusField["Placement"]?.DeepClone(),
                     ["Position"] = 88,
+                    ["Size"] = "Large",
+                    ["Type"] = "ParagraphText",
+                    ["LockedForManualEditing"] = true,
+                    ["ExcludeFromCopyingOrCloning"] = true,
+                });
+
+                // What was reported to ZIMRA line by line. The theme prints the fiscal document from this, so the
+                // printout always matches the receipt ZIMRA holds.
+                textFieldList.Add(new JObject
+                {
+                    ["DisplayOnView"] = true,
+                    ["Key"] = ManagerCustomField.FiscalLinesGuid,
+                    ["Name"] = "Fiscal Lines",
+                    ["Placement"] = statusField["Placement"]?.DeepClone(),
+                    ["Position"] = 101,
                     ["Size"] = "Large",
                     ["Type"] = "ParagraphText",
                     ["LockedForManualEditing"] = true,

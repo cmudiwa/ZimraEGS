@@ -108,6 +108,7 @@ namespace ZimraEGS.Services
                 [ManagerCustomField.FiscalDocumentGuid] = FiscalDocumentTitle(device, row.ReceiptType),
             };
             strings[ManagerCustomField.FiscalBuyerGuid] = BuyerText(row);
+            strings[ManagerCustomField.FiscalLinesGuid] = FiscalLinesJson(device, row);
 
             var decimals = new Newtonsoft.Json.Linq.JObject
             {
@@ -172,6 +173,69 @@ namespace ZimraEGS.Services
                 buyer.BuyerContacts?.PhoneNo,
             };
             return string.Join("\n", lines.Where(x => !string.IsNullOrWhiteSpace(x)));
+        }
+
+        /// <summary>
+        /// Lines, taxes, payments and total of the receipt as reported to ZIMRA, in a compact form the invoice
+        /// theme prints from. ZIMRA's layout requires the VAT amount on each line, which Manager does not provide.
+        /// </summary>
+        public static string? FiscalLinesJson(Device device, FiscalReceipt row)
+        {
+            Receipt receipt;
+            try { receipt = FiscalService.ParseReceipt(row); }
+            catch (JsonException) { return null; }
+
+            bool inclusive = receipt.ReceiptLinesTaxInclusive;
+            var taxNames = (DeviceStore.GetConfig(device)?.ApplicableTaxes ?? []).GroupBy(t => t.TaxID).ToDictionary(g => g.Key, g => g.Last().TaxName);
+            static decimal Round(decimal v) => decimal.Round(v, 2, MidpointRounding.AwayFromZero);
+
+            var lines = new Newtonsoft.Json.Linq.JArray();
+            foreach (var line in receipt.ReceiptLines)
+            {
+                decimal? vat = null;
+                if (line.TaxPercent.HasValue)
+                {
+                    decimal rate = line.TaxPercent.Value / 100m;
+                    vat = Round(inclusive ? line.ReceiptLineTotal - line.ReceiptLineTotal / (1 + rate) : line.ReceiptLineTotal * rate);
+                }
+                lines.Add(new Newtonsoft.Json.Linq.JObject
+                {
+                    ["code"] = line.ReceiptLineHSCode,
+                    ["name"] = line.ReceiptLineName,
+                    ["qty"] = line.ReceiptLineQuantity,
+                    ["price"] = line.ReceiptLinePrice,
+                    // Amount as entered: including tax on a tax inclusive document, excluding it otherwise.
+                    ["amount"] = line.ReceiptLineTotal,
+                    ["vat"] = vat,      // null when the tax has no percentage (exempt)
+                    ["total"] = inclusive ? line.ReceiptLineTotal : line.ReceiptLineTotal + (vat ?? 0),
+                });
+            }
+
+            var taxes = new Newtonsoft.Json.Linq.JArray(receipt.ReceiptTaxes.Select(t => new Newtonsoft.Json.Linq.JObject
+            {
+                ["name"] = taxNames.GetValueOrDefault(t.TaxID),
+                ["percent"] = t.TaxPercent,
+                ["net"] = t.SalesAmountWithTax - t.TaxAmount,
+                ["vat"] = t.TaxAmount,
+                ["amount"] = t.SalesAmountWithTax,
+            }));
+
+            var payments = new Newtonsoft.Json.Linq.JArray(receipt.ReceiptPayments.Select(p => new Newtonsoft.Json.Linq.JObject
+            {
+                ["method"] = p.MoneyTypeCode.ToString(),
+                ["amount"] = p.PaymentAmount,
+            }));
+
+            return new Newtonsoft.Json.Linq.JObject
+            {
+                ["inclusive"] = inclusive,
+                ["currency"] = receipt.ReceiptCurrency,
+                ["lines"] = lines,
+                ["taxes"] = taxes,
+                ["payments"] = payments,
+                ["net"] = receipt.ReceiptTaxes.Sum(t => t.SalesAmountWithTax - t.TaxAmount),
+                ["total"] = receipt.ReceiptTotal,
+            }.ToString(Formatting.None);
         }
 
         /// <summary>The title ZIMRA prescribes for the printed document.</summary>

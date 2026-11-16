@@ -35,6 +35,8 @@ namespace ZimraEGS.Models
         public const string FiscalDocumentGuid = "b7c1f0de-3a5e-4d7b-9a53-6f2f0c1e7d10";
         /// <summary>The buyer as reported to ZIMRA, one detail per line, for printing on the document.</summary>
         public const string FiscalBuyerGuid = "b7c1f0de-3a5e-4d7b-9a53-6f2f0c1e7d11";
+        /// <summary>Lines, taxes and payments exactly as reported to ZIMRA (JSON), for printing the fiscal document.</summary>
+        public const string FiscalLinesGuid = "b7c1f0de-3a5e-4d7b-9a53-6f2f0c1e7d12";
         public const string ServerResponseGuid = "75190339-992a-4fb0-bf79-f5f8226edb4b"; 
 
         public const string DeviceIDGuid = "d08c8744-486f-470d-82d1-29b1a1cb06ae";

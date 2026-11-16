@@ -576,6 +576,16 @@ public class FiscalFlowTests : IDisposable
         Assert.Equal(ManagerSetupData.ThemeKey, (string?)patch.Body["customThemeId"]);
         Assert.Equal("FISCAL TAX INVOICE", (string?)patch.Body["customFields2"]!["strings"]![ManagerCustomField.FiscalDocumentGuid]);
         Assert.Equal("Buyer Ltd\nTIN: 2000000001", (string?)patch.Body["customFields2"]!["strings"]![ManagerCustomField.FiscalBuyerGuid]);
+
+        // The lines as reported to ZIMRA travel with the document, so the printout shows the VAT on each line.
+        var reported = JObject.Parse((string)patch.Body["customFields2"]!["strings"]![ManagerCustomField.FiscalLinesGuid]!);
+        Assert.False((bool)reported["inclusive"]!);
+        Assert.Equal(3, ((JArray)reported["lines"]!).Count);
+        Assert.Equal(15m, (decimal)reported["lines"]![0]!["vat"]!);        // 15% of 100.00
+        Assert.Equal(115m, (decimal)reported["lines"]![0]!["total"]!);
+        Assert.Equal(-1.5m, (decimal)reported["lines"]![2]!["vat"]!);      // the discount line reduces the VAT
+        Assert.Equal(111.50m, (decimal)reported["total"]!);
+        Assert.Equal("Cash", (string?)reported["payments"]![0]!["method"]);
         Assert.Equal($"/api3/sales-invoice-form/{key}", patch.ApiUrl);
         Assert.Equal("12345-0001-0001", (string?)patch.Body!["reference"]);
         Assert.Equal("APPROVED", (string?)patch.Body["customFields2"]!["strings"]![ManagerCustomField.ApprovalStatusGuid]);

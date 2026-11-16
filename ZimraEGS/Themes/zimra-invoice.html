@@ -69,6 +69,7 @@ const F = {
   status: ['fc6f05f9-50c7-46c0-b9f5-7fe0ca83cf2a', 'Approval Status'],
   docType: ['b7c1f0de-3a5e-4d7b-9a53-6f2f0c1e7d10', 'Fiscal Document'],
   buyer: ['b7c1f0de-3a5e-4d7b-9a53-6f2f0c1e7d11', 'Fiscal Buyer'],
+  lines: ['b7c1f0de-3a5e-4d7b-9a53-6f2f0c1e7d12', 'Fiscal Lines'],
   qr: ['7eaadfa6-1fb9-4dce-9a1c-9d74beb1d0f7', 'Receipt QRCode'],
   code: ['a0454495-cae8-43ef-a418-4dad69427e78', 'Verification Code'],
   date: ['39b3d219-a386-4d9f-b3a0-55968b4bc7b7', 'Receipt Date'],
@@ -126,6 +127,55 @@ function addressText(value, skip) {
     s = s.split('\n').map(x => x.trim()).filter(x => x && x.toUpperCase() !== 'SELLER' && x !== skip).join('\n');
   }
   return s.trim();
+}
+
+// Documents that have not been fiscalised, or were fiscalised before the reported data was kept:
+// the lines and totals as Manager lays them out.
+function renderManagerTable(data, main, field) {
+  const table = data.table || {};
+  const columns = table.columns || [];
+  const alignClass = c => /end|right/i.test(String(c.align)) ? 'end' : /center/i.test(String(c.align)) ? 'center' : '';
+  if (columns.length) {
+    // Manager heads the quantity column with the unit of measure ("PCE"). ZIMRA's layout calls it Qty;
+    // the unit moves next to each quantity instead.
+    const priceIndex = columns.findIndex(c => /^unit price$/i.test(c.label || ''));
+    const qtyIndex = priceIndex > 0 ? priceIndex - 1 : -1;
+    const unit = qtyIndex >= 0 && !/^(qty|quantity)$/i.test(columns[qtyIndex].label || '') ? (columns[qtyIndex].label || '') : '';
+    const heading = (c, i) => i === qtyIndex ? 'Qty' : c.label;
+
+    const lines = el('table', { class: 'lines' });
+    lines.append(el('thead', {}, [el('tr', {}, columns.map((c, i) => el('th', { class: alignClass(c) || null, text: heading(c, i) })))]));
+    const body = el('tbody');
+    for (const row of table.rows || []) {
+      // Column sums (such as the total quantity) are not part of a fiscal invoice.
+      if (!row.cells || row.isTotalRow) continue;
+      body.append(el('tr', {}, row.cells.map((cell, i) => {
+        const c = columns[i] || {};
+        const td = el('td', { class: [alignClass(c), c.nowrap ? 'nowrap' : ''].join(' ').trim() || null });
+        if (cell && cell.image && cell.image.url) td.append(el('img', { src: cell.image.url, alt: '', style: 'max-height:40px' }));
+        const text = (cell && cell.text) || '';
+        td.append(i === qtyIndex && unit && text ? text + ' ' + unit : text);
+        return td;
+      })));
+    }
+    lines.append(body);
+    main.append(lines);
+  }
+
+  // Totals.
+  if ((data.totals || []).length) {
+    main.append(el('table', { class: 'totals' }, data.totals.map(t => el('tr', { class: t.emphasis ? 'strong' : null }, [
+      el('td', { text: t.label }), el('td', { class: 'nowrap', text: t.text }),
+    ]))));
+  }
+
+  // How it was paid, when the document says so.
+  const payments = [[field('pay1'), field('amount1')], [field('pay2'), field('amount2')]].filter(p => p[0]);
+  if (payments.length) {
+    main.append(el('div', { class: 'extra' }, [el('b', { text: 'Paid by: ' }),
+      payments.map(p => p[0].replace(/^\d+\s*[|-]\s*/, '') + (p[1] ? ' ' + p[1] : '')).join(', ')]));
+  }
+
 }
 
 function renderDocument(data) {
@@ -248,50 +298,57 @@ function renderDocument(data) {
     ]));
   }
 
-  // Lines, exactly as Manager laid them out.
+  // What was reported to ZIMRA, when the document carries it. The fiscal document is printed from this so
+  // that it matches the receipt ZIMRA holds line by line, including the VAT on each line.
+  let reportedData = null;
+  try { reportedData = fiscalised && field('lines') ? JSON.parse(field('lines')) : null; } catch (e) { reportedData = null; }
+
   const table = data.table || {};
-  const columns = table.columns || [];
-  const alignClass = c => /end|right/i.test(String(c.align)) ? 'end' : /center/i.test(String(c.align)) ? 'center' : '';
   if (table.description) main.append(el('p', { class: 'pre', text: table.description }));
-  if (columns.length) {
-    // Manager heads the quantity column with the unit of measure ("PCE"). ZIMRA's layout calls it Qty;
-    // the unit moves next to each quantity instead.
-    const priceIndex = columns.findIndex(c => /^unit price$/i.test(c.label || ''));
-    const qtyIndex = priceIndex > 0 ? priceIndex - 1 : -1;
-    const unit = qtyIndex >= 0 && !/^(qty|quantity)$/i.test(columns[qtyIndex].label || '') ? (columns[qtyIndex].label || '') : '';
-    const heading = (c, i) => i === qtyIndex ? 'Qty' : c.label;
 
+  if (reportedData && Array.isArray(reportedData.lines)) {
+    const r = reportedData;
+    const money = v => Number(v).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const price = v => Number(v).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+    const qty = v => Number(v).toLocaleString('en', { maximumFractionDigits: 3 });
+    const percent = v => Number(v).toLocaleString('en', { maximumFractionDigits: 2 }) + '%';
+    const head = (text, cls) => el('th', { class: cls || null, text });
+    const cell = (text, cls) => el('td', { class: cls || null, text });
+
+    // ZIMRA's columns: a tax inclusive document shows VAT and total; a tax exclusive one also the amount before tax.
     const lines = el('table', { class: 'lines' });
-    lines.append(el('thead', {}, [el('tr', {}, columns.map((c, i) => el('th', { class: alignClass(c) || null, text: heading(c, i) })))]));
-    const body = el('tbody');
-    for (const row of table.rows || []) {
-      // Column sums (such as the total quantity) are not part of a fiscal invoice.
-      if (!row.cells || row.isTotalRow) continue;
-      body.append(el('tr', {}, row.cells.map((cell, i) => {
-        const c = columns[i] || {};
-        const td = el('td', { class: [alignClass(c), c.nowrap ? 'nowrap' : ''].join(' ').trim() || null });
-        if (cell && cell.image && cell.image.url) td.append(el('img', { src: cell.image.url, alt: '', style: 'max-height:40px' }));
-        const text = (cell && cell.text) || '';
-        td.append(i === qtyIndex && unit && text ? text + ' ' + unit : text);
-        return td;
-      })));
-    }
-    lines.append(body);
-    main.append(lines);
-  }
-
-  // Totals.
-  if ((data.totals || []).length) {
-    main.append(el('table', { class: 'totals' }, data.totals.map(t => el('tr', { class: t.emphasis ? 'strong' : null }, [
-      el('td', { text: t.label }), el('td', { class: 'nowrap', text: t.text }),
+    lines.append(el('thead', {}, [el('tr', {}, [
+      head('Code'), head('Description'), head('Qty', 'end'), head('Price', 'end'),
+      r.inclusive ? null : head('Amount (excl. tax)', 'end'),
+      head('VAT', 'end'), head('Total amount (incl. tax)', 'end'),
+    ])]));
+    lines.append(el('tbody', {}, r.lines.map(l => el('tr', {}, [
+      cell(l.code || '', 'nowrap'), cell(l.name || ''), cell(qty(l.qty), 'end nowrap'), cell(price(l.price), 'end nowrap'),
+      r.inclusive ? null : cell(money(l.amount), 'end nowrap'),
+      cell(l.vat === null || l.vat === undefined ? '-' : money(l.vat), 'end nowrap'), cell(money(l.total), 'end nowrap'),
     ]))));
-  }
+    main.append(lines);
 
-  // How it was paid, when the document says so.
-  const payments = [[field('pay1'), field('amount1')], [field('pay2'), field('amount2')]].filter(p => p[0]);
-  if (payments.length) {
-    main.append(el('div', { class: 'extra' }, [el('b', { text: 'Paid by: ' }),
-      payments.map(p => p[0].replace(/^\d+\s*[|-]\s*/, '') + (p[1] ? ' ' + p[1] : '')).join(', ')]));
+    // Settlement: totals per tax, then the amount to pay.
+    const rows = [];
+    if (!r.inclusive) rows.push(['Total (excl. tax)', money(r.net), false]);
+    for (const t of r.taxes || []) {
+      const label = t.percent === null || t.percent === undefined ? (t.name || 'Exempt') : 'Total ' + percent(t.percent) + ' VAT';
+      rows.push([label, t.percent === null || t.percent === undefined ? '-' : money(t.vat), false]);
+    }
+    rows.push(['Invoice total, ' + (r.currency || ''), money(r.total), true]);
+    main.append(el('table', { class: 'totals' }, rows.map(x => el('tr', { class: x[2] ? 'strong' : null }, [
+      el('td', { text: x[0] }), el('td', { class: 'nowrap', text: x[1] }),
+    ]))));
+
+    if ((r.payments || []).length) {
+      const names = { MobileWallet: 'Mobile wallet', BankTransfer: 'Bank transfer' };
+      main.append(el('table', { class: 'totals', style: 'margin-top:8px' }, r.payments.map(p => el('tr', {}, [
+        el('td', { text: 'Paid by ' + (names[p.method] || p.method) }), el('td', { class: 'nowrap', text: money(p.amount) }),
+      ]))));
+    }
+  } else {
+    renderManagerTable(data, main, field);
   }
 
   // Any other fields the business shows on its documents.
