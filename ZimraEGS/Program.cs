@@ -19,6 +19,12 @@ namespace ZimraEGS
 
             var builder = WebApplication.CreateBuilder(args);
 
+            // Your own settings (admin e-mail, business details, ...) go in appsettings.Local.json next to
+            // appsettings.json. It is not part of the repository, so updating with git pull never touches it.
+            builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
+            builder.Configuration.AddEnvironmentVariables();
+            builder.Configuration.AddCommandLine(args);
+
             string logDirectory = Environment.GetEnvironmentVariable("HOME") != null
             ? Path.Combine(Environment.GetEnvironmentVariable("HOME"), "LogFiles", "MyApp") // Azure
             : Path.Combine(AppContext.BaseDirectory, "Logs"); // Local

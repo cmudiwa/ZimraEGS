@@ -126,7 +126,16 @@ Test devices are free. A live (production) device sends documents while its subs
 - **Warnings.** The panel warns from `Billing:WarnDays` (7) days before the paid period ends.
 - **Customers** see their devices, paid-until dates and payments at `/account`, and can change their password. A customer who forgot their password gets a new one from an administrator (`/admin`, open the customer, "Set a new password").
 
-Settings, in `appsettings.json` or as environment variables (for example `Billing__AdminEmails__0=you@example.com`):
+Put your own settings in `ZimraEGS/appsettings.Local.json` (create it next to `appsettings.json`). It overrides `appsettings.json` and is not part of the repository, so `git pull` never conflicts with it. For example:
+
+```json
+{
+  "Billing": { "AdminEmails": ["you@example.com"], "Price": "USD 10 a month per device" },
+  "Privacy": { "ControllerName": "Your Business (Pvt) Ltd", "ContactEmail": "privacy@example.com" }
+}
+```
+
+Environment variables work too (for example `Billing__AdminEmails__0=you@example.com`). The settings:
 
 | Setting | Meaning |
 | --- | --- |

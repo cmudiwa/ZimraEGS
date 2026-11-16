@@ -368,3 +368,6 @@ FodyWeavers.xsd
 ZimraEGS-data/
 ZimraEGS/Data/*.db*
 ZimraEGS/Data/keys/
+
+# Local settings of each installation (admin e-mail, business details)
+appsettings.Local.json
