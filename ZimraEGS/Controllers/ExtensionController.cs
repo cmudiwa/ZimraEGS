@@ -38,7 +38,21 @@ namespace ZimraEGS.Controllers
             // Manager loads the page inside a frame on its own origin.
             Response.Headers.ContentSecurityPolicy = "frame-ancestors *";
             Response.Headers.CacheControl = "no-cache";
-            return PhysicalFile(Path.Combine(_environment.WebRootPath, "extension", "index.html"), "text/html; charset=utf-8");
+
+            // Manager's built-in browser keeps scripts in its cache. Each script URL carries a fingerprint of the
+            // file, so a new version of the panel is always loaded after an update.
+            string html = System.IO.File.ReadAllText(Path.Combine(_environment.WebRootPath, "extension", "index.html"));
+            foreach (string script in new[] { "/extension/app.js", "/js/qrcode.js" })
+            {
+                html = html.Replace($"src=\"{script}\"", $"src=\"{script}?v={Fingerprint(script)}\"");
+            }
+            return Content(html, "text/html; charset=utf-8");
+        }
+
+        private string Fingerprint(string webPath)
+        {
+            var file = new FileInfo(Path.Combine(_environment.WebRootPath, webPath.TrimStart('/')));
+            return file.Exists ? file.LastWriteTimeUtc.Ticks.ToString("x") + file.Length.ToString("x") : "0";
         }
 
         private async Task<JObject> ReadBodyAsync()

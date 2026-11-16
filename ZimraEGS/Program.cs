@@ -97,7 +97,17 @@ namespace ZimraEGS
             }
 
             app.UseHttpsRedirection();
-            app.UseStaticFiles();
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                // The panel's files must not be served stale from a browser cache after an update.
+                OnPrepareResponse = ctx =>
+                {
+                    if (ctx.Context.Request.Path.StartsWithSegments("/extension"))
+                    {
+                        ctx.Context.Response.Headers.CacheControl = "no-cache";
+                    }
+                }
+            });
 
             app.UseRouting();
 
