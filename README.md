@@ -1,4 +1,4 @@
-# Manager Io - Zimra FDMS Integration
+# Fiscal Managerio - ZIMRA FDMS fiscalisation for Manager.io
 
 ## ZimraEGS Application Testing Guide
 

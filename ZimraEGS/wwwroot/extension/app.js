@@ -80,7 +80,7 @@
         var response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         var data = null;
         try { data = await response.json(); } catch (e) { /* not JSON */ }
-        if (!response.ok) throw new Error((data && (data.Error || data.error)) || ('The ZimraEGS server answered ' + response.status));
+        if (!response.ok) throw new Error((data && (data.Error || data.error)) || ('The Fiscal Managerio server answered ' + response.status));
         return data;
     }
 
@@ -767,7 +767,7 @@
         if (s.state === 'setup') return renderSetup();
         if (s.state === 'unknown-device') {
             subtitle.textContent = 'Device not found';
-            return show(card(note('bad', 'This business is linked to a device this ZimraEGS server does not know. Check that the extension points to the server the device was registered on.')));
+            return show(card(note('bad', 'This business is linked to a device this Fiscal Managerio server does not know. Check that the extension points to the server the device was registered on.')));
         }
         if (s.state === 'ready') return renderReady(s);
         if (s.state === 'done') return finish(s, false);

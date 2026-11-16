@@ -1,6 +1,6 @@
 @model HomeViewModel
 @{
-    ViewData["Title"] = "ZimraEGS";
+    ViewData["Title"] = "Fiscal Managerio";
     int devices = Model.TestDevices + Model.LiveDevices;
 }
 
@@ -35,8 +35,9 @@
 <div class="home">
     <h1>ZIMRA fiscalisation for Manager</h1>
     <p class="lead-text">
-        ZimraEGS sends Manager's sales invoices, credit notes and debit notes to ZIMRA's Fiscalisation Data Management
+        Fiscal Managerio sends Manager's sales invoices, credit notes and debit notes to ZIMRA's Fiscalisation Data Management
         System (FDMS), stores the QR code and receipt numbers on each document, and prints it in ZIMRA's layout.
+        It works with <a href="https://www.manager.io" target="_blank" rel="noopener">Manager.io</a>, the desktop, server and cloud accounting software.
     </p>
 
     <section class="panel" aria-labelledby="status-title">
@@ -105,7 +106,7 @@
         {
             <div class="notice warn">
                 This address is not secure (http). If Manager is opened over https, the panel may be blocked.
-                Serve ZimraEGS over https, or use it on the same computer as Manager with <code>http://localhost</code>.
+                Serve Fiscal Managerio over https, or use it on the same computer as Manager with <code>http://localhost</code>.
             </div>
         }
     </section>
@@ -126,7 +127,14 @@
             <li><strong>Keep this server running</strong> so fiscal days are closed on time. A day that runs past ZIMRA's limit is closed before the next document is sent.</li>
             <li><strong>Going live</strong> needs ZIMRA's approval of sample documents (invoice, credit note, debit note) from the test environment.</li>
         </ul>
-        <p class="muted" style="margin:14px 0 0">
+        <p class="muted" style="margin:14px 0 4px">
+            Manager:
+            <a href="https://www.manager.io" target="_blank" rel="noopener">manager.io</a> ·
+            <a href="https://www.manager.io/download" target="_blank" rel="noopener">Download</a> ·
+            <a href="https://www.manager.io/guides" target="_blank" rel="noopener">Guides</a> ·
+            <a href="https://forum.manager.io" target="_blank" rel="noopener">Forum</a>
+        </p>
+        <p class="muted" style="margin:0">
             ZIMRA:
             <a href="https://fdms.zimra.co.zw" target="_blank" rel="noopener">FDMS portal</a> ·
             <a href="https://www.zimra.co.zw/news/2307-compliance-with-the-zimra-fiscalisation-data-management-system-fdms" target="_blank" rel="noopener">Getting approved</a> ·
