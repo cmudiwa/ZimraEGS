@@ -34,7 +34,7 @@ namespace ZimraEGS.Services
         /// Increased whenever the records created in Manager change (fields, theme). A business set up with an
         /// older revision is brought up to date the next time its panel is opened.
         /// </summary>
-        public const int Revision = 5;
+        public const int Revision = 6;
 
         public const string ThemeKey = "f43edcbb-2448-4890-bbd2-18f87fdbad13";
 

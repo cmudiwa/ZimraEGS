@@ -47,6 +47,8 @@ table.lines { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
 table.lines th { border-bottom: 1.5px solid var(--ink); padding: 5px 6px; text-align: left; vertical-align: bottom; }
 table.lines td { border-bottom: 1px solid var(--line); padding: 5px 6px; vertical-align: top; overflow-wrap: anywhere; }
 table.lines tr.total td { font-weight: bold; border-bottom: 0; }
+table.taxes { width: 60%; margin-left: auto; margin-top: 4px; }
+table.taxes tr.total td { border-top: 1px solid var(--ink); }
 .end, table.lines th.end, table.lines td.end { text-align: right; }
 .center, table.lines th.center, table.lines td.center { text-align: center; }
 .nowrap { white-space: nowrap; }
@@ -329,13 +331,32 @@ function renderDocument(data) {
     ]))));
     main.append(lines);
 
-    // Settlement: totals per tax, then the amount to pay.
+    // Taxes block, required on A4: per tax its rate (the name for exempt), net amount, VAT and amount with VAT.
+    const taxes = r.taxes || [];
+    if (taxes.length) {
+      const exempt = t => t.percent === null || t.percent === undefined;
+      const taxTable = el('table', { class: 'lines taxes' });
+      taxTable.append(el('thead', {}, [el('tr', {}, [
+        head('VAT %'), head('Net amount', 'end'), head('VAT', 'end'), head('Amount (incl. tax)', 'end'),
+      ])]));
+      taxTable.append(el('tbody', {}, taxes.map(t => el('tr', {}, [
+        cell(exempt(t) ? (t.name || 'Exempt') : percent(t.percent)),
+        cell(money(t.net), 'end nowrap'),
+        cell(exempt(t) ? '-' : money(t.vat), 'end nowrap'),
+        cell(money(t.amount), 'end nowrap'),
+      ]))));
+      taxTable.append(el('tbody', {}, [el('tr', { class: 'total' }, [
+        cell('Total'),
+        cell(money(taxes.reduce((x, t) => x + Number(t.net), 0)), 'end nowrap'),
+        cell(money(taxes.reduce((x, t) => x + Number(t.vat), 0)), 'end nowrap'),
+        cell(money(taxes.reduce((x, t) => x + Number(t.amount), 0)), 'end nowrap'),
+      ])]));
+      main.append(taxTable);
+    }
+
+    // Settlement: the amount to pay.
     const rows = [];
     if (!r.inclusive) rows.push(['Total (excl. tax)', money(r.net), false]);
-    for (const t of r.taxes || []) {
-      const label = t.percent === null || t.percent === undefined ? (t.name || 'Exempt') : 'Total ' + percent(t.percent) + ' VAT';
-      rows.push([label, t.percent === null || t.percent === undefined ? '-' : money(t.vat), false]);
-    }
     rows.push(['Invoice total, ' + (r.currency || ''), money(r.total), true]);
     main.append(el('table', { class: 'totals' }, rows.map(x => el('tr', { class: x[2] ? 'strong' : null }, [
       el('td', { text: x[0] }), el('td', { class: 'nowrap', text: x[1] }),
