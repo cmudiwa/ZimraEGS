@@ -255,7 +255,8 @@
     function dayCard() {
         var s = state.server || {};
         if (!s.day || !s.deviceLink) return null;
-        var children = [el('div', { class: 'small', text: 'Fiscal day ' + s.day.number + (s.day.open ? ' is open. It is closed automatically every night.' : ' is closed. The next document opens a new day.') })];
+        var summary = el('div', { class: 'small', text: 'Fiscal day ' + s.day.number + (s.day.open ? ' is open. It is closed automatically every night.' : ' is closed. The next document opens a new day.') });
+        var children = [summary];
         if (s.day.open && s.day.endingSoon) children.push(note('warn', s.day.hoursLeft > 0
             ? 'This fiscal day reaches the maximum length ZIMRA allows in about ' + s.day.hoursLeft + ' hours. It will be closed automatically before then.'
             : 'This fiscal day has reached the maximum length ZIMRA allows. It is closed before the next document is sent.'));
@@ -270,7 +271,12 @@
                         try {
                             var r = await server('/extension/api/closeday', { deviceLink: s.deviceLink });
                             status.textContent = r.message;
-                            if (r.success) { button.remove(); } else { button.disabled = false; }
+                            if (r.success) {
+                                // The day is closed now: say so once, instead of next to the old "is open" line.
+                                summary.textContent = r.message + ' The next document opens a new day.';
+                                status.textContent = '';
+                                button.remove();
+                            } else { button.disabled = false; }
                         } catch (e) { status.textContent = e.message; button.disabled = false; }
                     }
                 }
