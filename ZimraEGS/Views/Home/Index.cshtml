@@ -1,53 +1,155 @@
-﻿@{
-    ViewData["Title"] = "ZimraEGS Home";
+@model HomeViewModel
+@{
+    ViewData["Title"] = "ZimraEGS";
+    int devices = Model.TestDevices + Model.LiveDevices;
 }
 
-<div class="container mt-n25">
-    <div class="text-center">
-        <div class="card shadow-lg rounded p-4 mt-4">
-        <h2 class="mb-3">Welcome to ZimraEGS</h2>
-        <p class="lead">The Simple and Free eInvoicing Integration Solution</p>
-        </div>
+<style>
+    .home { max-width: 920px; margin: 0 auto; text-align: start; padding: 8px 0 24px; }
+    .home h1 { font-size: 1.9rem; font-weight: 700; margin: 0 0 6px; }
+    .home .lead-text { font-size: 1.08rem; color: var(--bs-secondary-color, #6c757d); margin: 0 0 22px; max-width: 70ch; }
+    .home .panel { background: var(--bs-body-bg, #fff); border: 1px solid var(--bs-border-color, #dee2e6); border-radius: 10px; padding: 20px 22px; margin-bottom: 16px; }
+    .home h2 { font-size: 1.1rem; font-weight: 700; margin: 0 0 12px; }
+    .home .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); gap: 12px; }
+    .home .stat { border: 1px solid var(--bs-border-color, #dee2e6); border-radius: 8px; padding: 10px 12px; }
+    .home .stat .label { font-size: .8rem; color: var(--bs-secondary-color, #6c757d); }
+    .home .stat .value { font-size: 1.15rem; font-weight: 600; margin-top: 2px; }
+    .home .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; vertical-align: middle; }
+    .home .dot.ok { background: #1f9d55; } .home .dot.bad { background: #c0392b; }
+    .home table.values { width: 100%; border-collapse: collapse; }
+    .home table.values th, .home table.values td { padding: 9px 8px; border-bottom: 1px solid var(--bs-border-color, #dee2e6); vertical-align: middle; font-weight: normal; }
+    .home table.values th { width: 28%; color: var(--bs-secondary-color, #6c757d); }
+    .home table.values tr:last-child th, .home table.values tr:last-child td { border-bottom: 0; }
+    .home code.v { font-size: .95rem; color: var(--bs-body-color, #212529); background: var(--bs-tertiary-bg, #f1f3f5); padding: 2px 6px; border-radius: 4px; word-break: break-all; }
+    .home .copy { margin-left: 8px; }
+    .home ol.steps { margin: 0; padding-left: 1.3rem; }
+    .home ol.steps li { margin-bottom: 10px; }
+    .home ol.steps li strong { font-weight: 600; }
+    .home .notice { border-radius: 8px; padding: 10px 12px; margin: 12px 0 0; font-size: .95rem; }
+    .home .notice.warn { background: rgba(232, 161, 0, .12); border: 1px solid rgba(232, 161, 0, .45); }
+    .home ul.plain { margin: 0; padding-left: 1.1rem; }
+    .home ul.plain li { margin-bottom: 6px; }
+    .home .muted { color: var(--bs-secondary-color, #6c757d); font-size: .9rem; }
+</style>
 
-        <div class="card shadow-lg rounded p-4 mt-4">
-            <h4 class="mb-3">What is ZimraEGS?</h4>
-            <p class="custom-lead">
-                ZimraEGS is a web service designed to simplify your eInvoicing process.<br /> 
-                It seamlessly integrates the <a href="https://manager.io" target="_blank">"Manager"</a> accounting application with the
-                <a href="https://fdms.zimra.co.zw/" target="_blank">ZIMRA Fiscal Device Management System</a>
-            </p>
-           
-            <div class="d-flex justify-content-center align-items-center my-3">
-                <div class="mx-3">
-                    <img src="/images/managerlogo.png" alt="Manager io Icon" class="img-fluid" style="height: 100px;">
-                </div>
-                <span class="fs-3 mx-3">&#x2194;</span>
-                <div class="mx-3">
-                    <img src="/images/logo.png" alt="Zimra EGS Icon" class="img-fluid" style="height: 100px;">
-                </div>
-                <span class="fs-3 mx-3">&#x2194;</span>
-                <div class="mx-3">
-                    <img src="/images/Zimra-logo.png" alt="Zimra FDMS Icon" class="img-fluid" style="height: 100px;">
+<div class="home">
+    <h1>ZIMRA fiscalisation for Manager</h1>
+    <p class="lead-text">
+        ZimraEGS sends Manager's sales invoices, credit notes and debit notes to ZIMRA's Fiscalisation Data Management
+        System (FDMS), stores the QR code and receipt numbers on each document, and prints it in ZIMRA's layout.
+    </p>
+
+    <section class="panel" aria-labelledby="status-title">
+        <h2 id="status-title">This server</h2>
+        <div class="status-grid">
+            <div class="stat">
+                <div class="label">Status</div>
+                <div class="value">
+                    @if (Model.DatabaseOk)
+                    {
+                        <span class="dot ok"></span><span>Running</span>
+                    }
+                    else
+                    {
+                        <span class="dot bad"></span><span>Database error</span>
+                    }
                 </div>
             </div>
-
-            <h4 class="mt-2">How to Start?</h4>
-            <p class="custom-lead">To begin, add the relay URL to your invoice: <span style="font-weight: bold;" id="relay-url"></span>.</p>
-            <p class="custom-lead">Save your invoice and click [Relay]. <br />
-                On the first use, you will be redirected to the business setup page to integrate Manager with Zimra FDMS.<br /> 
-                Follow the setup wizard, and you're ready to go.</p>
-
-            <h4 class="mt-4"><b>Attention</b></h4>
-            <p class="custom-lead">This is an initial release focused on testing and ensuring all features function as expected.</p>
+            <div class="stat">
+                <div class="label">Connected devices</div>
+                <div class="value">
+                    @if (devices == 0)
+                    {
+                        <span>None yet</span>
+                    }
+                    else
+                    {
+                        <span>@(Model.LiveDevices > 0 ? $"{Model.LiveDevices} live" : "")@(Model.LiveDevices > 0 && Model.TestDevices > 0 ? ", " : "")@(Model.TestDevices > 0 ? $"{Model.TestDevices} test" : "")</span>
+                    }
+                </div>
+            </div>
+            <div class="stat">
+                <div class="label">Open fiscal days</div>
+                <div class="value">@Model.OpenFiscalDays</div>
+            </div>
+            <div class="stat">
+                <div class="label">Automatic day close</div>
+                <div class="value">@(Model.AutoCloseEnabled ? $"Daily at {Model.AutoCloseTime}" : "Off")</div>
+            </div>
         </div>
-    </div>
+        @if (!Model.DatabaseOk)
+        {
+            <div class="notice warn">The database could not be read. Check the server's log and that the data folder is writable.</div>
+        }
+    </section>
+
+    <section class="panel" aria-labelledby="extension-title">
+        <h2 id="extension-title">1. Add the extension to Manager</h2>
+        <p class="muted" style="margin-top:-4px">
+            In your business in Manager, add an extension. Depending on the version it is under Settings, as
+            <em>Extensions</em> or <em>Custom Buttons</em>. Enter these values:
+        </p>
+        <table class="values">
+            <tr><th scope="row">Name</th><td><code class="v">ZIMRA</code></td></tr>
+            <tr><th scope="row">Source</th><td><code class="v">Url</code></td></tr>
+            <tr>
+                <th scope="row">Endpoint</th>
+                <td>
+                    <code class="v" id="endpoint">@Model.ExtensionEndpoint</code>
+                    <button type="button" class="btn btn-outline-secondary btn-sm copy" data-copy="endpoint">Copy</button>
+                </td>
+            </tr>
+            <tr><th scope="row">Placement</th><td><code class="v">sales-invoice-view</code></td></tr>
+        </table>
+        @if (!Model.IsLocal && !Model.IsHttps)
+        {
+            <div class="notice warn">
+                This address is not secure (http). If Manager is opened over https, the panel may be blocked.
+                Serve ZimraEGS over https, or use it on the same computer as Manager with <code>http://localhost</code>.
+            </div>
+        }
+    </section>
+
+    <section class="panel" aria-labelledby="steps-title">
+        <h2 id="steps-title">2. Connect and fiscalise</h2>
+        <ol class="steps">
+            <li><strong>Open any sales invoice and click ZIMRA.</strong> The first time, the panel asks for the Device ID, Serial Number and Activation Key that ZIMRA gave you, then sets up the custom fields, tax codes and invoice theme in Manager.</li>
+            <li><strong>Set the HS codes of your items.</strong> In the panel, open <em>HS codes for items</em>: it suggests codes from ZIMRA's tariff (@Model.HsCodeCount.ToString("N0") codes) and checks them.</li>
+            <li><strong>Send documents.</strong> Open an invoice, credit note or debit note, click ZIMRA and then <em>Send to ZIMRA</em>. The fiscal day opens by itself and is closed every night.</li>
+        </ol>
+    </section>
+
+    <section class="panel" aria-labelledby="notes-title">
+        <h2 id="notes-title">Good to know</h2>
+        <ul class="plain">
+            <li><strong>Back up the data folder.</strong> It holds each device's private key and receipt chain; Manager's own backup does not include it. Losing it means registering the device with ZIMRA again.</li>
+            <li><strong>Keep this server running</strong> so fiscal days are closed on time. A day that runs past ZIMRA's limit is closed before the next document is sent.</li>
+            <li><strong>Going live</strong> needs ZIMRA's approval of sample documents (invoice, credit note, debit note) from the test environment.</li>
+        </ul>
+        <p class="muted" style="margin:14px 0 0">
+            ZIMRA:
+            <a href="https://fdms.zimra.co.zw" target="_blank" rel="noopener">FDMS portal</a> ·
+            <a href="https://www.zimra.co.zw/news/2307-compliance-with-the-zimra-fiscalisation-data-management-system-fdms" target="_blank" rel="noopener">Getting approved</a> ·
+            <a href="https://www.zimra.co.zw/news/2308-use-of-harmonized-system-codes-hs-codes-under-domestic-taxes-in-recording-of-sales-transactions-using-fiscal-devices" target="_blank" rel="noopener">HS codes</a> ·
+            <a href="https://www.zimra.co.zw/customs/classification-of-goods/tariff-handbook" target="_blank" rel="noopener">Tariff handbook</a>
+        </p>
+    </section>
+
+    <p class="muted" style="text-align:center">Based on ZimraEGS by mabaega</p>
 </div>
 
 <script>
-    let currentUrl = window.location.origin + window.location.pathname;
-    if (currentUrl.endsWith('/')) {
-        currentUrl = currentUrl.slice(0, -1);
-    }
-    const relayUrl = currentUrl + '/relay';
-    document.getElementById('relay-url').textContent = relayUrl;
+    document.querySelectorAll('[data-copy]').forEach(function (button) {
+        button.addEventListener('click', function () {
+            var text = document.getElementById(button.dataset.copy).textContent.trim();
+            var done = function () { button.textContent = 'Copied'; setTimeout(function () { button.textContent = 'Copy'; }, 1500); };
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(done);
+            } else {
+                var range = document.createRange(); range.selectNodeContents(document.getElementById(button.dataset.copy));
+                var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+                try { document.execCommand('copy'); done(); } catch (e) { } sel.removeAllRanges();
+            }
+        });
+    });
 </script>
