@@ -116,6 +116,27 @@ Create a credit note that refers to the fiscalised invoice, enter the reason in 
 
 ---
 
+## Subscriptions (live devices)
+
+Test devices are free. A live (production) device sends documents while its subscription is paid up:
+
+- **Accounts.** Customers create an account at `/account/signup`. When a live device is connected in the ZIMRA panel, the panel asks for the account's e-mail and password and links the device to it. A new live device gets a trial (`Billing:TrialDays`, 14 by default).
+- **Payments are recorded by hand.** There is no payment gateway. When a customer pays, an administrator opens `/admin`, opens the device and records the payment: months or days paid, amount, and how it was paid with its reference. The paid period is extended from its current end, or from today if it has already ended.
+- **What stops, and what never does.** When a subscription has ended and the grace period (`Billing:GraceDays`, 7) is over, new documents are not sent to ZIMRA and the panel says so with a link to the account. A receipt whose answer from ZIMRA was lost is still sent, closing the fiscal day (by hand or automatically) still works, and fiscalised documents can still be opened and printed. A lapsed payment never breaks the fiscal chain or leaves a day open.
+- **Warnings.** The panel warns from `Billing:WarnDays` (7) days before the paid period ends.
+- **Customers** see their devices, paid-until dates and payments at `/account`, and can change their password. A customer who forgot their password gets a new one from an administrator (`/admin`, open the customer, "Set a new password").
+
+Settings, in `appsettings.json` or as environment variables (for example `Billing__AdminEmails__0=you@example.com`):
+
+| Setting | Meaning |
+| --- | --- |
+| `Billing:Enabled` | `false` turns subscriptions off: every device may send. |
+| `Billing:AdminEmails` | E-mail addresses whose accounts may open `/admin`. Create the account at `/account/signup` with one of these addresses. |
+| `Billing:TrialDays`, `Billing:GraceDays`, `Billing:WarnDays` | Trial for a new live device, days of sending after the paid period, days of warning before it ends. |
+| `Billing:Price`, `Billing:PaymentInstructions` | Shown to customers: the price and how to pay you. |
+
+When the server is reachable from the internet, serve it over https only, so passwords and sign-in cookies are never sent in the clear.
+
 ## Key Points to Understand
 1. **Invoice Date and Number** are set at fiscalisation: the date is the submission time, the number is `DeviceID-FiscalDay-ReceiptCounter`, which is unique for the taxpayer across all of its devices. Times are taken from ZIMRA's clock, so a slow or wrong clock on the server cannot misdate a receipt.
 2. **Lost connection**: if ZIMRA does not answer, the signed receipt is kept and sent again, unchanged, the next time a document is sent. The chain cannot go out of step.

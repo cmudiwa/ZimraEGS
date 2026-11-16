@@ -1,0 +1,64 @@
+@model AdminPageModel
+@{ ViewData["Title"] = "Admin"; }
+<div class="pg">
+    <h1>Admin</h1>
+    <p class="sub">Customers, devices and subscriptions. Record a payment on a device's page when you receive it.</p>
+    @if (!string.IsNullOrEmpty(Model.Message)) { <div class="msg ok">@Model.Message</div> }
+
+    <section class="panel">
+        <h2>Devices</h2>
+        <div class="tabs">
+            <a class="@(Model.Filter == "attention" ? "on" : "")" asp-action="Index" asp-route-filter="attention">Need attention</a>
+            <a class="@(Model.Filter == "live" ? "on" : "")" asp-action="Index" asp-route-filter="live">Live</a>
+            <a class="@(Model.Filter == "all" ? "on" : "")" asp-action="Index" asp-route-filter="all">All</a>
+        </div>
+        @if (Model.Devices.Count == 0)
+        {
+            <p class="muted" style="margin:0">@(Model.Filter == "attention" ? "Nothing needs attention: every live device is paid up." : "No devices.")</p>
+        }
+        else
+        {
+            <div class="scroll">
+            <table class="t">
+                <thead><tr><th>Device</th><th>Customer</th><th>Environment</th><th>Subscription</th><th class="num">Paid until</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var (d, s) in Model.Devices)
+                {
+                    <tr>
+                        <td>@d.DeviceID<div class="muted">@d.SerialNumber</div></td>
+                        <td>@(d.Account?.Name ?? "-")<div class="muted">@d.Account?.Email</div></td>
+                        <td>@(d.Environment == ZimraEGS.ApiClient.Models.PlatformType.Production ? "Live" : "Test")</td>
+                        <td><span class="badge-s s-@s.State">@ZimraEGS.Views.Account.Status.Label(s.State)</span></td>
+                        <td class="num">@(d.PaidUntilUtc?.AddHours(2).ToString("d MMM yyyy") ?? "-")</td>
+                        <td class="num"><a class="btn btn-outline-primary btn-sm" asp-action="Device" asp-route-id="@d.Id">Open</a></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+            </div>
+        }
+    </section>
+
+    <section class="panel">
+        <h2>Customers</h2>
+        @if (Model.Accounts.Count == 0) { <p class="muted" style="margin:0">No accounts yet.</p> }
+        else
+        {
+            <div class="scroll">
+            <table class="t">
+                <thead><tr><th>Business</th><th>E-mail</th><th>Phone</th><th class="num">Devices</th><th class="num">Last sign-in</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var a in Model.Accounts)
+                {
+                    <tr>
+                        <td>@a.Name</td><td>@a.Email</td><td>@a.Phone</td><td class="num">@a.Devices.Count</td>
+                        <td class="num">@(a.LastSignInUtc?.AddHours(2).ToString("d MMM yyyy") ?? "-")</td>
+                        <td class="num"><a class="btn btn-outline-secondary btn-sm" asp-action="Account" asp-route-id="@a.Id">Open</a></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+            </div>
+        }
+    </section>
+</div>

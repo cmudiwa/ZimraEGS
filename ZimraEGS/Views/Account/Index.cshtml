@@ -1,0 +1,80 @@
+@model AccountPageModel
+@{ ViewData["Title"] = "Your account"; }
+<div class="pg">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+        <div>
+            <h1>@Model.Account.Name</h1>
+            <p class="sub">@Model.Account.Email</p>
+        </div>
+        <div style="display:flex;gap:8px">
+            @if (Model.IsAdmin) { <a class="btn btn-outline-primary btn-sm" asp-controller="Admin" asp-action="Index">Admin</a> }
+            <form asp-action="SignOutNow" method="post"><button class="btn btn-outline-secondary btn-sm" type="submit">Sign out</button></form>
+        </div>
+    </div>
+    @if (!string.IsNullOrEmpty(Model.Message)) { <div class="msg ok" role="status">@Model.Message</div> }
+
+    <section class="panel">
+        <h2>Your devices</h2>
+        @if (Model.Devices.Count == 0)
+        {
+            <p class="muted" style="margin:0">No devices yet. A live device is linked to this account when you connect it in the ZIMRA panel in Manager, by entering this account's e-mail and password.</p>
+        }
+        else
+        {
+            <div class="scroll">
+            <table class="t">
+                <thead><tr><th>Device</th><th>Environment</th><th>Subscription</th><th class="num">Paid until</th></tr></thead>
+                <tbody>
+                @foreach (var (d, s) in Model.Devices)
+                {
+                    <tr>
+                        <td>@d.DeviceID<div class="muted">@d.SerialNumber</div></td>
+                        <td>@(d.Environment == ZimraEGS.ApiClient.Models.PlatformType.Production ? "Live" : "Test")</td>
+                        <td><span class="badge-s s-@s.State">@ZimraEGS.Views.Account.Status.Label(s.State)</span><div class="muted">@s.Describe(Model.Options)</div></td>
+                        <td class="num">@(d.PaidUntilUtc?.AddHours(2).ToString("d MMM yyyy") ?? "-")</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+            </div>
+        }
+        <div class="msg warn" style="margin:14px 0 0">
+            @if (!string.IsNullOrEmpty(Model.Options.Price)) { <strong>@Model.Options.Price</strong><br /> }
+            @Model.Options.PaymentInstructions
+        </div>
+    </section>
+
+    <section class="panel">
+        <h2>Payments</h2>
+        @if (Model.Payments.Count == 0) { <p class="muted" style="margin:0">No payments recorded yet.</p> }
+        else
+        {
+            <div class="scroll">
+            <table class="t">
+                <thead><tr><th>Recorded</th><th>Device</th><th>Period</th><th>Reference</th><th class="num">Amount</th></tr></thead>
+                <tbody>
+                @foreach (var p in Model.Payments)
+                {
+                    <tr>
+                        <td>@p.RecordedUtc.AddHours(2).ToString("d MMM yyyy")</td>
+                        <td>@Model.Devices.FirstOrDefault(x => x.device.Id == p.DeviceRowId).device?.DeviceID</td>
+                        <td>@p.PeriodFromUtc.AddHours(2).ToString("d MMM yyyy") to @p.PeriodToUtc.AddHours(2).ToString("d MMM yyyy")</td>
+                        <td>@p.Reference</td>
+                        <td class="num">@(p.Amount.HasValue ? $"{p.Currency} {p.Amount:N2}" : "-")</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+            </div>
+        }
+    </section>
+
+    <section class="panel">
+        <h2>Change password</h2>
+        <form asp-action="ChangePassword" method="post" class="grid2">
+            <div><label for="current">Current password</label><input class="form-control" id="current" name="current" type="password" required autocomplete="current-password" /></div>
+            <div><label for="replacement">New password</label><input class="form-control" id="replacement" name="replacement" type="password" required minlength="@ZimraEGS.Services.BillingService.MinimumPasswordLength" autocomplete="new-password" /></div>
+            <div style="align-self:end"><button class="btn btn-outline-primary mt-3" type="submit">Change password</button></div>
+        </form>
+    </section>
+</div>

@@ -1,0 +1,16 @@
+@model AccountFormModel
+@{ ViewData["Title"] = "Sign in"; }
+<div class="pg narrow">
+    <h1>Sign in</h1>
+    <p class="sub">See your devices and subscription.</p>
+    @if (Model.Error != null) { <div class="msg bad" role="alert">@Model.Error</div> }
+    <form class="panel" asp-action="SignIn" method="post">
+        <input type="hidden" name="ReturnUrl" value="@Model.ReturnUrl" />
+        <label for="Email">E-mail</label>
+        <input class="form-control" id="Email" name="Email" type="email" value="@Model.Email" required autocomplete="email" />
+        <label for="Password">Password</label>
+        <input class="form-control" id="Password" name="Password" type="password" required autocomplete="current-password" />
+        <button class="btn btn-primary mt-3 w-100" type="submit">Sign in</button>
+    </form>
+    <p class="muted">No account yet? <a asp-action="SignUp">Create one</a>. Forgot your password? Contact us and we will set a new one.</p>
+</div>

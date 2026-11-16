@@ -679,6 +679,153 @@ public class FiscalFlowTests : IDisposable
         Assert.True(_fdms.ConfigReadBeforeOpenDay, "getConfig must be called before a new fiscal day is opened");
     }
 
+    // ---------------- subscription
+
+    private (FiscalService service, DeviceStore store, FiscalDbContext db, BillingService billing) BillingScope(BillingOptions? options = null)
+    {
+        var db = NewDb();
+        var store = new DeviceStore(db, _protection, NullLogger<DeviceStore>.Instance);
+        var billing = new BillingService(db, Options.Create(options ?? new BillingOptions()));
+        var fiscalOptions = Options.Create(new FiscalServiceOptions { CloseDayPollDelayMs = 0, CloseDayPollAttempts = 2 });
+        return (new FiscalService(db, store, _fdms, _locks, fiscalOptions, NullLogger<FiscalService>.Instance, billing), store, db, billing);
+    }
+
+    /// <summary>The test device, moved to the live environment and linked to a new account.</summary>
+    private async Task<(string link, int deviceRowId)> LiveDeviceAsync(DateTime? paidUntilUtc, bool withAccount = true)
+    {
+        string link = await RegisterDeviceAsync();
+        var (_, store, db, billing) = BillingScope();
+        var device = (await store.FindByLinkAsync(link))!;
+        device.Environment = PlatformType.Production;
+        await db.SaveChangesAsync();
+        if (withAccount)
+        {
+            var (account, _) = await billing.CreateAccountAsync("owner@example.com", "a long password", "Test Trader", "");
+            await billing.LinkDeviceAsync(device, account!);
+        }
+        device.PaidUntilUtc = paidUntilUtc;
+        await db.SaveChangesAsync();
+        return ("ZEGS-LINK:Production:" + string.Join(':', link.Split(':').Skip(2)), device.Id);
+    }
+
+    private async Task<FiscaliseResult> SendAsync(string link)
+    {
+        var (service, store, _, _) = BillingScope();
+        var relay = new RelayData(RelayForm(link, Guid.NewGuid().ToString(), SimpleLines()));
+        var device = await store.ResolveAsync(relay);
+        return await service.FiscaliseAsync(device!.Id, relay);
+    }
+
+    [Fact]
+    public void Subscription_status_follows_the_paid_period()
+    {
+        var (_, _, _, billing) = BillingScope(new BillingOptions { GraceDays = 7, WarnDays = 7 });
+        var now = new DateTime(2026, 11, 16, 10, 0, 0, DateTimeKind.Utc);
+        Device Live(DateTime? until, int? account = 1) => new() { Environment = PlatformType.Production, AccountId = account, PaidUntilUtc = until };
+
+        Assert.Equal(BillingState.Free, billing.StatusOf(new Device { Environment = PlatformType.Simulation }, now).State);
+        Assert.Equal(BillingState.NoAccount, billing.StatusOf(Live(now.AddDays(30), null), now).State);
+        Assert.Equal(BillingState.Active, billing.StatusOf(Live(now.AddDays(30)), now).State);
+        Assert.Equal(BillingState.EndingSoon, billing.StatusOf(Live(now.AddDays(3)), now).State);
+        Assert.Equal(BillingState.Grace, billing.StatusOf(Live(now.AddDays(-3)), now).State);
+        Assert.Equal(BillingState.Expired, billing.StatusOf(Live(now.AddDays(-8)), now).State);
+        Assert.Equal(BillingState.Expired, billing.StatusOf(Live(null), now).State);
+        Assert.True(billing.StatusOf(Live(now.AddDays(-3)), now).MaySend);
+        Assert.False(billing.StatusOf(Live(now.AddDays(-8)), now).MaySend);
+
+        // Switched off: everything may send.
+        var (_, _, _, off) = BillingScope(new BillingOptions { Enabled = false });
+        Assert.True(off.StatusOf(Live(null, null), now).MaySend);
+    }
+
+    [Fact]
+    public async Task A_recorded_payment_extends_from_the_end_or_from_today()
+    {
+        var (_, rowId) = await LiveDeviceAsync(paidUntilUtc: null);
+        var (_, _, db, billing) = BillingScope();
+        var now = new DateTime(2026, 11, 16, 10, 0, 0, DateTimeKind.Utc);
+
+        // Ended long ago: the new period starts today, so the gap is not charged for.
+        var device = await db.Devices.FirstAsync(d => d.Id == rowId);
+        device.PaidUntilUtc = now.AddDays(-40); await db.SaveChangesAsync();
+        var first = await billing.RecordPaymentAsync(rowId, 1, 0, 25m, "usd", "EcoCash MP1", "", "admin@example.com", now);
+        Assert.Equal(now, first.PeriodFromUtc);
+        Assert.Equal(now.AddMonths(1), first.PeriodToUtc);
+        Assert.Equal("USD", first.Currency);
+
+        // Still running: the next payment continues from its end.
+        var second = await billing.RecordPaymentAsync(rowId, 0, 10, null, "", "", "goodwill", "admin@example.com", now.AddDays(5));
+        Assert.Equal(now.AddMonths(1), second.PeriodFromUtc);
+        Assert.Equal(now.AddMonths(1).AddDays(10), second.PeriodToUtc);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => billing.RecordPaymentAsync(rowId, 0, 0, null, "", "", "", "a", now));
+    }
+
+    [Fact]
+    public async Task A_lapsed_subscription_stops_new_documents_but_never_the_fiscal_chain()
+    {
+        // Paid up: one document goes through and opens the day.
+        var (link, rowId) = await LiveDeviceAsync(DateTime.UtcNow.AddDays(30));
+        Assert.True((await SendAsync(link)).Success);
+
+        // A second document is signed but ZIMRA's answer is lost; then the subscription runs out.
+        _fdms.FailNextSubmitAfterRecording = true;
+        Assert.False((await SendAsync(link)).Success);
+        var (_, _, db, _) = BillingScope();
+        (await db.Devices.FirstAsync(d => d.Id == rowId)).PaidUntilUtc = DateTime.UtcNow.AddDays(-30);
+        await db.SaveChangesAsync();
+
+        // A new document is refused, but the unanswered receipt is still sent first.
+        var refused = await SendAsync(link);
+        Assert.False(refused.Success);
+        Assert.Equal("The subscription has ended", refused.ProblemTitle);
+        Assert.Equal(2, _fdms.AllReceipts.Count);
+        Assert.Equal(2, _fdms.DayReceipts.Count);
+
+        // Closing the day is never blocked.
+        var (service, _, _, _) = BillingScope();
+        Assert.True((await service.CloseDayAsync(rowId)).Success);
+        Assert.Empty(_fdms.Violations);
+
+        // Recording a payment lets documents through again.
+        var (_, _, _, billing) = BillingScope();
+        await billing.RecordPaymentAsync(rowId, 1, 0, 25m, "USD", "cash", "", "admin@example.com");
+        Assert.True((await SendAsync(link)).Success);
+    }
+
+    [Fact]
+    public async Task A_live_device_without_an_account_cannot_send_and_a_new_one_gets_its_trial()
+    {
+        var (link, rowId) = await LiveDeviceAsync(paidUntilUtc: null, withAccount: false);
+        var refused = await SendAsync(link);
+        Assert.Equal("This device is not linked to an account", refused.ProblemTitle);
+        Assert.Equal(0, _fdms.SubmitCalls);
+
+        var (_, _, db, billing) = BillingScope(new BillingOptions { TrialDays = 14 });
+        var (account, _) = await billing.CreateAccountAsync("Shop@Example.com ", "a long password", "Shop", "077");
+        Assert.Equal("shop@example.com", account!.Email);
+        var device = await db.Devices.FirstAsync(d => d.Id == rowId);
+        await billing.LinkDeviceAsync(device, account);
+        Assert.InRange((device.PaidUntilUtc!.Value - DateTime.UtcNow).TotalDays, 13.9, 14.1);
+        Assert.True((await SendAsync(link)).Success);
+    }
+
+    [Fact]
+    public async Task Sign_in_checks_the_password_and_locks_after_five_wrong_ones()
+    {
+        var (_, _, _, billing) = BillingScope();
+        Assert.NotNull((await billing.CreateAccountAsync("a@b.co", "correct horse battery", "A", "")).account);
+        Assert.Equal("There is already an account with this e-mail address. Sign in instead.", (await billing.CreateAccountAsync("A@B.CO", "another password", "B", "")).error);
+        Assert.NotNull((await billing.CreateAccountAsync("c@d.co", "short", "C", "")).error);
+
+        Assert.NotNull((await billing.AuthenticateAsync("A@b.co", "correct horse battery")).account);
+        for (int i = 0; i < 5; i++) Assert.Null((await billing.AuthenticateAsync("a@b.co", "wrong")).account);
+        var locked = await billing.AuthenticateAsync("a@b.co", "correct horse battery");
+        Assert.Null(locked.account);
+        Assert.Contains("Too many wrong passwords", locked.error);
+        Assert.Null((await billing.AuthenticateAsync("nobody@b.co", "whatever")).account);
+    }
+
     [Fact]
     public async Task A_wrong_link_secret_is_not_accepted()
     {

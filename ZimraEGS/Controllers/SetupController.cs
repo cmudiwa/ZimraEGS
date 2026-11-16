@@ -17,9 +17,11 @@ namespace ZimraEGS.Controllers
         private readonly DeviceStore _store;
         private readonly FiscalDbContext _db;
         private readonly IFdmsClientFactory _clientFactory;
+        private readonly BillingService _billing;
 
-        public SetupController(ILogger<SetupController> logger, DeviceStore store, FiscalDbContext db, IFdmsClientFactory clientFactory)
+        public SetupController(ILogger<SetupController> logger, DeviceStore store, FiscalDbContext db, IFdmsClientFactory clientFactory, BillingService billing)
         {
+            _billing = billing;
             _logger = logger;
             _store = store;
             _db = db;
@@ -36,6 +38,9 @@ namespace ZimraEGS.Controllers
             public string? DeviceModelVersion { get; set; }
             public int? DefaultMoneyType { get; set; }
             public string? Api { get; set; }
+            /// <summary>The account a live device is billed to.</summary>
+            public string? AccountEmail { get; set; }
+            public string? AccountPassword { get; set; }
             public string? BusinessDetailsJson { get; set; }
         }
 
@@ -90,6 +95,20 @@ namespace ZimraEGS.Controllers
             if (!TryValidate(request, out var environment, out string error))
             {
                 return BadRequest(new { Error = error });
+            }
+
+            // A live device is billed to an account: check it before anything is registered with ZIMRA.
+            Account? account = null;
+            if (environment == PlatformType.Production && _billing.Options.Enabled)
+            {
+                string signUp = $"{Request.Scheme}://{Request.Host}{Request.PathBase}/account/signup";
+                if (string.IsNullOrWhiteSpace(request.AccountEmail) || string.IsNullOrEmpty(request.AccountPassword))
+                {
+                    return BadRequest(new { Error = $"A live device needs an account. Enter your account's e-mail and password, or create an account at {signUp}" });
+                }
+                var (found, accountError) = await _billing.AuthenticateAsync(request.AccountEmail, request.AccountPassword);
+                if (found == null) return BadRequest(new { Error = accountError + $" (Create an account at {signUp})" });
+                account = found;
             }
 
             try
@@ -161,6 +180,11 @@ namespace ZimraEGS.Controllers
                 _store.ApplyCertificateInfo(device, info);
                 device.IsActive = true;
                 await _db.SaveChangesAsync();
+
+                if (account != null && device.AccountId != account.Id)
+                {
+                    await _billing.LinkDeviceAsync(device, account);
+                }
 
                 string deviceLink = await _store.IssueLinkAsync(device);
                 _logger.LogInformation("Device {DeviceID} ({Environment}) set up", device.DeviceID, device.Environment);

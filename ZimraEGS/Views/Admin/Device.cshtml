@@ -1,0 +1,68 @@
+@model AdminDeviceModel
+@{ ViewData["Title"] = "Device " + Model.Device.DeviceID; var d = Model.Device; }
+<div class="pg">
+    <p class="muted" style="margin:0 0 6px"><a asp-action="Index">Admin</a> / Device</p>
+    <h1>Device @d.DeviceID</h1>
+    <p class="sub">@Model.TaxpayerName · @(d.Environment == ZimraEGS.ApiClient.Models.PlatformType.Production ? "Live" : "Test") · serial @d.SerialNumber</p>
+    @if (!string.IsNullOrEmpty(Model.Message)) { <div class="msg ok" role="status">@Model.Message</div> }
+    @if (!string.IsNullOrEmpty(Model.Error)) { <div class="msg bad" role="alert">@Model.Error</div> }
+
+    <section class="panel">
+        <h2>Subscription</h2>
+        <p><span class="badge-s s-@Model.Status.State">@ZimraEGS.Views.Account.Status.Label(Model.Status.State)</span>
+           <span style="margin-left:8px">@Model.Status.Describe(Model.Options)</span></p>
+        <form asp-action="LinkAccount" asp-route-id="@d.Id" method="post" class="grid2">
+            <div>
+                <label for="accountId">Customer</label>
+                <select class="form-select" id="accountId" name="accountId" required>
+                    <option value="">Choose an account…</option>
+                    @foreach (var a in Model.Accounts)
+                    {
+                        <option value="@a.Id" selected="@(a.Id == d.AccountId)">@a.Name (@a.Email)</option>
+                    }
+                </select>
+            </div>
+            <div style="align-self:end"><button class="btn btn-outline-primary mt-2" type="submit">@(d.AccountId == null ? "Link to account" : "Move to this account")</button></div>
+        </form>
+    </section>
+
+    <section class="panel">
+        <h2>Record a payment</h2>
+        <p class="muted" style="margin-top:-6px">Extends the paid period from its current end, or from today if it has already ended.</p>
+        <form asp-action="RecordPayment" asp-route-id="@d.Id" method="post">
+            <div class="grid2">
+                <div><label for="months">Months</label><input class="form-control" id="months" name="months" type="number" min="0" max="36" value="1" /></div>
+                <div><label for="extraDays">Extra days</label><input class="form-control" id="extraDays" name="extraDays" type="number" min="0" max="366" value="0" /></div>
+                <div><label for="amount">Amount received</label><input class="form-control" id="amount" name="amount" inputmode="decimal" placeholder="e.g. 25.00" /></div>
+                <div><label for="currency">Currency</label><select class="form-select" id="currency" name="currency"><option>USD</option><option>ZWG</option></select></div>
+                <div><label for="reference">Paid by and reference</label><input class="form-control" id="reference" name="reference" placeholder="e.g. EcoCash MP251116.1234" /></div>
+                <div><label for="note">Note (optional)</label><input class="form-control" id="note" name="note" /></div>
+            </div>
+            <button class="btn btn-primary mt-3" type="submit">Record payment</button>
+        </form>
+    </section>
+
+    <section class="panel">
+        <h2>Payments</h2>
+        @if (Model.Payments.Count == 0) { <p class="muted" style="margin:0">None recorded.</p> }
+        else
+        {
+            <div class="scroll">
+            <table class="t">
+                <thead><tr><th>Recorded</th><th>Period</th><th>Reference</th><th>Note</th><th>By</th><th class="num">Amount</th></tr></thead>
+                <tbody>
+                @foreach (var p in Model.Payments)
+                {
+                    <tr>
+                        <td>@p.RecordedUtc.AddHours(2).ToString("d MMM yyyy HH:mm")</td>
+                        <td>@p.PeriodFromUtc.AddHours(2).ToString("d MMM yyyy") to @p.PeriodToUtc.AddHours(2).ToString("d MMM yyyy")</td>
+                        <td>@p.Reference</td><td>@p.Note</td><td>@p.RecordedBy</td>
+                        <td class="num">@(p.Amount.HasValue ? $"{p.Currency} {p.Amount:N2}" : "-")</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+            </div>
+        }
+    </section>
+</div>

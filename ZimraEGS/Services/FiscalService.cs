@@ -80,9 +80,12 @@ namespace ZimraEGS.Services
             DateParseHandling = DateParseHandling.None
         };
 
+        private readonly BillingService? _billing;
+
         public FiscalService(FiscalDbContext db, DeviceStore store, IFdmsClientFactory clientFactory, DeviceLocks locks,
-            Microsoft.Extensions.Options.IOptions<FiscalServiceOptions> options, ILogger<FiscalService> logger)
+            Microsoft.Extensions.Options.IOptions<FiscalServiceOptions> options, ILogger<FiscalService> logger, BillingService? billing = null)
         {
+            _billing = billing;
             _db = db;
             _store = store;
             _clientFactory = clientFactory;
@@ -139,6 +142,19 @@ namespace ZimraEGS.Services
                 if (existing != null)
                 {
                     return new FiscaliseResult { Receipt = existing };
+                }
+
+                // The subscription only stops new documents. Anything already numbered (above) is always sent,
+                // and closing the day is never blocked, so a lapsed payment cannot break the fiscal chain.
+                if (_billing != null)
+                {
+                    var billing = _billing.StatusOf(device);
+                    if (!billing.MaySend)
+                    {
+                        return FiscaliseResult.Problem(
+                            billing.State == BillingState.NoAccount ? "This device is not linked to an account" : "The subscription has ended",
+                            billing.Describe(_billing.Options), _billing.Options.PaymentInstructions);
+                    }
                 }
 
                 // 2. Make sure a fiscal day is open.

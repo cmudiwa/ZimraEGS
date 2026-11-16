@@ -513,10 +513,24 @@
             el('p', { class: 'small', style: 'margin:10px 0', text: 'Creates or updates a tax code in Manager for every tax ZIMRA allows on this device.' }), button, status]);
     }
 
+    // Subscription notice: warns before a live device's paid period ends, and says why sending is paused.
+    function billingNote() {
+        var b = (state.server || {}).billing;
+        if (!b || b.state === 'Free' || b.state === 'Active') return null;
+        var kind = b.maySend ? 'warn' : 'bad';
+        var box = el('div', { class: 'note ' + kind }, [
+            el('div', { text: b.text }),
+            b.instructions ? el('div', { style: 'margin-top:4px', text: b.instructions }) : null,
+            el('div', { style: 'margin-top:6px' }, [el('a', { href: b.accountUrl, target: '_blank', rel: 'noopener', text: 'Open your account' })])
+        ]);
+        return box;
+    }
+
     function dayCard() {
         var s = state.server || {};
         if (!s.day || !s.deviceLink) return null;
-        var summary = el('div', { class: 'small', text: 'Fiscal day ' + s.day.number + (s.day.open ? ' is open. It is closed automatically every night.' : ' is closed. The next document opens a new day.') });
+        var summary = el('div', { class: 'small', text: !s.day.number ? 'No fiscal day has been opened yet. The first document sent opens one.'
+            : 'Fiscal day ' + s.day.number + (s.day.open ? ' is open. It is closed automatically every night.' : ' is closed. The next document opens a new day.') });
         var children = [summary];
         if (s.day.open && s.day.endingSoon) children.push(note('warn', s.day.hoursLeft > 0
             ? 'This fiscal day reaches the maximum length ZIMRA allows in about ' + s.day.hoursLeft + ' hours. It will be closed automatically before then.'
@@ -560,6 +574,7 @@
             }
         });
         show(card(
+            billingNote(),
             rows([
                 ['Type', sum.receiptType === 'FiscalInvoice' ? 'Invoice' : sum.receiptType === 'CreditNote' ? 'Credit note' : 'Debit note'],
                 ['Customer', sum.buyer || 'No customer details (walk-in sale)'],
@@ -576,10 +591,14 @@
 
     function renderProblem(s) {
         subtitle.textContent = 'Not sent';
+        var subscriptionProblem = /subscription|not linked to an account/i.test(s.title || '');
         show(card(
             el('h2', { style: 'font-size:16px;margin:0 0 10px', text: s.title || 'This document cannot be sent yet' }),
+            subscriptionProblem && s.billing ? el('div', { style: 'margin-bottom:10px' }, [el('a', { class: 'primary', href: s.billing.accountUrl, target: '_blank', rel: 'noopener', text: 'Open your account' })]) : null,
             el('ul', {}, (s.problems || []).map(function (p) { return el('li', { text: p }); })),
-            el('p', { class: 'small', text: 'Nothing was changed. Fix these points in Manager and open this panel again.' }),
+            el('p', { class: 'small', text: subscriptionProblem
+                ? 'Nothing was sent. Once the subscription is renewed, open this panel again and send the document.'
+                : 'Nothing was changed. Fix these points in Manager and open this panel again.' }),
             el('div', { class: 'row' }, [el('button', { text: 'Back to the document', on: { click: backToInvoice } }),
                 el('div', { class: 'toolbar' }, [
                     (s.problems || []).some(function (p) { return /HS Code/i.test(p); })
@@ -595,7 +614,7 @@
         if (s.qrCode && window.QRCode) {
             try { new QRCode(qr, { text: s.qrCode, width: 116, height: 116, correctLevel: QRCode.CorrectLevel.L }); } catch (e) { /* no QR */ }
         }
-        var children = [];
+        var children = [billingNote()];
         if (saved === false) children.push(note('warn', 'ZIMRA has the receipt, but the result could not be saved on the document in Manager. Use "Save to Manager again".'));
         if (!s.approved) children.push(note('bad', 'ZIMRA recorded this receipt but flagged it. It stays part of the fiscal day and cannot be sent again. Correct it with a credit note and a new invoice.'));
         if ((s.validationErrors || []).length) {
@@ -649,6 +668,20 @@
             return el('div', {}, [el('label', { for: id, text: labelText }), f[id]]);
         }
         f.environment = el('select', { id: 'environment' }, [el('option', { value: 'Simulation', text: 'Test' }), el('option', { value: 'Production', text: 'Production (live)' })]);
+        f.accountEmail = el('input', { id: 'accountEmail', type: 'email', autocomplete: 'username' });
+        f.accountPassword = el('input', { id: 'accountPassword', type: 'password', autocomplete: 'current-password' });
+        var accountBox = el('div', { class: 'full hidden' }, [
+            el('div', { class: 'note info', style: 'margin:0 0 8px' }, [
+                'A live device needs an account. ',
+                el('a', { href: location.origin + '/account/signup', target: '_blank', rel: 'noopener', text: 'Create one' }),
+                ' if you have none, then enter it here.'
+            ]),
+            el('div', { class: 'grid' }, [
+                el('div', {}, [el('label', { for: 'accountEmail', text: 'Account e-mail' }), f.accountEmail]),
+                el('div', {}, [el('label', { for: 'accountPassword', text: 'Account password' }), f.accountPassword])
+            ])
+        ]);
+        f.environment.addEventListener('change', function () { accountBox.className = f.environment.value === 'Production' ? 'full' : 'full hidden'; });
         f.defaultMoneyType = el('select', { id: 'setupMoneyType' }, MONEY_TYPES.map(function (m) { return el('option', { value: m[0], text: m[1] }); }));
         var message = el('div', { class: 'hidden' });
         var taxpayer = el('div', { class: 'note info hidden' });
@@ -658,6 +691,7 @@
         var phase = 'check', setup = null;
 
         function say(kind, text) { message.className = 'note ' + kind; message.textContent = text; }
+        // The account fields stay editable, so a mistyped password can be corrected.
         function lock(locked) { ['deviceId', 'serialNumber', 'activationKey', 'environment', 'modelName', 'modelVersion'].forEach(function (id) { f[id].disabled = locked; }); }
         function step(text) { var li = el('li', { text: '… ' + text }); steps.appendChild(li); return { done: function () { li.textContent = '✓ ' + text; }, fail: function () { li.textContent = '✗ ' + text; } }; }
         function request() {
@@ -666,7 +700,9 @@
                 DeviceSerialNumber: f.serialNumber.value.trim(), ActivationKey: f.activationKey.value.trim(),
                 DeviceModelName: f.modelName.value.trim(), DeviceModelVersion: f.modelVersion.value.trim(),
                 DefaultMoneyType: f.defaultMoneyType.value === '' ? null : parseInt(f.defaultMoneyType.value, 10),
-                BusinessDetailsJson: null, Api: null
+                BusinessDetailsJson: null, Api: null,
+                AccountEmail: f.environment.value === 'Production' ? f.accountEmail.value.trim() : null,
+                AccountPassword: f.environment.value === 'Production' ? f.accountPassword.value : null
             };
         }
 
@@ -713,6 +749,7 @@
                 field('serialNumber', 'Serial Number', { required: true }),
                 field('activationKey', 'Activation Key', { required: true }),
                 el('div', {}, [el('label', { for: 'environment', text: 'ZIMRA environment' }), f.environment]),
+                accountBox,
                 el('div', { class: 'full' }, [el('label', { for: 'setupMoneyType', text: 'When a document does not say how it was paid, report it as' }), f.defaultMoneyType]),
                 field('modelName', 'Device model name (as on the ZIMRA form)', { value: 'Server', required: true }),
                 field('modelVersion', 'Device model version', { value: 'v1', required: true })

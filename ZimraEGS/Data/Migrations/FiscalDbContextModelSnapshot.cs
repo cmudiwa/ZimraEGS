@@ -17,10 +17,55 @@ namespace ZimraEGS.Data.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.11");
 
+            modelBuilder.Entity("ZimraEGS.Data.Account", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("FailedSignIns")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("LastSignInUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LockedUntilUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Phone")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Email")
+                        .IsUnique();
+
+                    b.ToTable("Accounts");
+                });
+
             modelBuilder.Entity("ZimraEGS.Data.Device", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("AccountId")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("ActivationKeyHash")
@@ -104,6 +149,9 @@ namespace ZimraEGS.Data.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTime?>("PaidUntilUtc")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("ProtectedPfx")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -120,6 +168,8 @@ namespace ZimraEGS.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("AccountId");
 
                     b.HasIndex("DeviceID", "Environment")
                         .IsUnique();
@@ -217,6 +267,66 @@ namespace ZimraEGS.Data.Migrations
                     b.ToTable("Receipts");
                 });
 
+            modelBuilder.Entity("ZimraEGS.Data.SubscriptionPayment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal?>("Amount")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("DeviceRowId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ExtraDays")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Months")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Note")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("PeriodFromUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("PeriodToUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RecordedBy")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("RecordedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeviceRowId");
+
+                    b.ToTable("SubscriptionPayments");
+                });
+
+            modelBuilder.Entity("ZimraEGS.Data.Device", b =>
+                {
+                    b.HasOne("ZimraEGS.Data.Account", "Account")
+                        .WithMany("Devices")
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Account");
+                });
+
             modelBuilder.Entity("ZimraEGS.Data.FiscalReceipt", b =>
                 {
                     b.HasOne("ZimraEGS.Data.Device", "Device")
@@ -226,6 +336,22 @@ namespace ZimraEGS.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Device");
+                });
+
+            modelBuilder.Entity("ZimraEGS.Data.SubscriptionPayment", b =>
+                {
+                    b.HasOne("ZimraEGS.Data.Device", "Device")
+                        .WithMany()
+                        .HasForeignKey("DeviceRowId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Device");
+                });
+
+            modelBuilder.Entity("ZimraEGS.Data.Account", b =>
+                {
+                    b.Navigation("Devices");
                 });
 
             modelBuilder.Entity("ZimraEGS.Data.Device", b =>

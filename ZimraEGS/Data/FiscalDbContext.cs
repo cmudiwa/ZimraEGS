@@ -69,7 +69,48 @@ namespace ZimraEGS.Data
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;
 
+        // Subscription. Test devices are free; a live device sends documents while it is paid up.
+        public int? AccountId { get; set; }
+        public Account? Account { get; set; }
+        /// <summary>End of the paid (or trial) period. Null: never paid.</summary>
+        public DateTime? PaidUntilUtc { get; set; }
+
         public List<FiscalReceipt> Receipts { get; set; } = [];
+    }
+
+    /// <summary>A customer: signs in to see their devices and subscription.</summary>
+    public class Account
+    {
+        public int Id { get; set; }
+        public string Email { get; set; } = string.Empty;          // stored lower case
+        public string Name { get; set; } = string.Empty;           // business or contact name
+        public string Phone { get; set; } = string.Empty;
+        public string PasswordHash { get; set; } = string.Empty;
+        public int FailedSignIns { get; set; }
+        public DateTime? LockedUntilUtc { get; set; }
+        public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
+        public DateTime? LastSignInUtc { get; set; }
+
+        public List<Device> Devices { get; set; } = [];
+    }
+
+    /// <summary>A payment recorded by hand by an administrator. Extends one device's paid period.</summary>
+    public class SubscriptionPayment
+    {
+        public int Id { get; set; }
+        public int DeviceRowId { get; set; }
+        public Device? Device { get; set; }
+        public int Months { get; set; }
+        public int ExtraDays { get; set; }
+        public decimal? Amount { get; set; }
+        public string Currency { get; set; } = string.Empty;
+        /// <summary>How it was paid and its reference, e.g. "EcoCash MP251116.1234".</summary>
+        public string Reference { get; set; } = string.Empty;
+        public string Note { get; set; } = string.Empty;
+        public DateTime PeriodFromUtc { get; set; }
+        public DateTime PeriodToUtc { get; set; }
+        public string RecordedBy { get; set; } = string.Empty;
+        public DateTime RecordedUtc { get; set; } = DateTime.UtcNow;
     }
 
     public static class ReceiptStatus
@@ -126,11 +167,21 @@ namespace ZimraEGS.Data
 
         public DbSet<Device> Devices => Set<Device>();
         public DbSet<FiscalReceipt> Receipts => Set<FiscalReceipt>();
+        public DbSet<Account> Accounts => Set<Account>();
+        public DbSet<SubscriptionPayment> SubscriptionPayments => Set<SubscriptionPayment>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            modelBuilder.Entity<Account>(e => e.HasIndex(a => a.Email).IsUnique());
+            modelBuilder.Entity<SubscriptionPayment>(e =>
+            {
+                e.HasOne(p => p.Device).WithMany().HasForeignKey(p => p.DeviceRowId);
+                e.HasIndex(p => p.DeviceRowId);
+            });
+
             modelBuilder.Entity<Device>(e =>
             {
+                e.HasOne(d => d.Account).WithMany(a => a.Devices).HasForeignKey(d => d.AccountId).OnDelete(DeleteBehavior.SetNull);
                 e.HasIndex(d => new { d.DeviceID, d.Environment }).IsUnique();
                 e.Property(d => d.Environment).HasConversion<string>();
                 e.Property(d => d.FiscalDayStatus).HasConversion<string>();

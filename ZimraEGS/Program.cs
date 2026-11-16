@@ -70,12 +70,31 @@ namespace ZimraEGS
             builder.Services.Configure<FdmsOptions>(builder.Configuration.GetSection("Fdms"));
             builder.Services.Configure<FiscalServiceOptions>(builder.Configuration.GetSection("Fiscal"));
             builder.Services.Configure<AutoCloseDayOptions>(builder.Configuration.GetSection("AutoCloseDay"));
+            builder.Services.Configure<BillingOptions>(builder.Configuration.GetSection("Billing"));
 
             builder.Services.AddSingleton<IFdmsClientFactory, FdmsClientFactory>();
             builder.Services.AddSingleton<DeviceLocks>();
             builder.Services.AddSingleton<HsCodeCatalog>();
             builder.Services.AddScoped<DeviceStore>();
+            builder.Services.AddScoped<BillingService>();
             builder.Services.AddScoped<FiscalService>();
+
+            // Customer and admin sign-in for the account pages. The Manager panel does not use it: it works with
+            // the device link stored in Manager, because cookies are not sent into a frame on another site.
+            builder.Services.AddAuthentication(Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationDefaults.AuthenticationScheme)
+                .AddCookie(o =>
+                {
+                    o.LoginPath = "/account/signin";
+                    o.LogoutPath = "/account/signout";
+                    o.AccessDeniedPath = "/account";
+                    o.Cookie.Name = "zimraegs.account";
+                    o.Cookie.HttpOnly = true;
+                    o.Cookie.SameSite = SameSiteMode.Lax;
+                    o.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+                    o.ExpireTimeSpan = TimeSpan.FromHours(12);
+                    o.SlidingExpiration = true;
+                });
+            builder.Services.AddAuthorization(o => o.AddPolicy("Admin", p => p.RequireClaim("zimraegs:admin", "true")));
             builder.Services.AddHostedService<AutoCloseDayService>();
 
             // Add services to the container.
@@ -125,6 +144,7 @@ namespace ZimraEGS
             app.UseRequestLocalization(localizationOptions);
 
 
+            app.UseAuthentication();
             app.UseAuthorization();
 
             app.MapControllerRoute(

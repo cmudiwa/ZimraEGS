@@ -1,0 +1,41 @@
+@model AdminAccountModel
+@{ ViewData["Title"] = Model.Account.Name; var a = Model.Account; }
+<div class="pg">
+    <p class="muted" style="margin:0 0 6px"><a asp-action="Index">Admin</a> / Customer</p>
+    <h1>@a.Name</h1>
+    <p class="sub">@a.Email @(string.IsNullOrEmpty(a.Phone) ? "" : "· " + a.Phone) · since @a.CreatedUtc.AddHours(2).ToString("d MMM yyyy")</p>
+    @if (Model.NewPassword != null)
+    {
+        <div class="msg warn" role="status">New password: <code style="font-size:1rem">@Model.NewPassword</code><br />Give it to the customer and ask them to change it after signing in. It is not shown again.</div>
+    }
+
+    <section class="panel">
+        <h2>Devices</h2>
+        @if (Model.Devices.Count == 0) { <p class="muted" style="margin:0">No devices linked.</p> }
+        else
+        {
+            <table class="t">
+                <thead><tr><th>Device</th><th>Environment</th><th>Subscription</th><th class="num">Paid until</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var (d, s) in Model.Devices)
+                {
+                    <tr>
+                        <td>@d.DeviceID</td><td>@(d.Environment == ZimraEGS.ApiClient.Models.PlatformType.Production ? "Live" : "Test")</td>
+                        <td><span class="badge-s s-@s.State">@ZimraEGS.Views.Account.Status.Label(s.State)</span></td>
+                        <td class="num">@(d.PaidUntilUtc?.AddHours(2).ToString("d MMM yyyy") ?? "-")</td>
+                        <td class="num"><a class="btn btn-outline-primary btn-sm" asp-action="Device" asp-route-id="@d.Id">Open</a></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </section>
+
+    <section class="panel">
+        <h2>Password</h2>
+        <p class="muted">If the customer forgot their password, set a new one and give it to them.</p>
+        <form asp-action="ResetPassword" asp-route-id="@a.Id" method="post" onsubmit="return confirm('Set a new password for this customer?');">
+            <button class="btn btn-outline-danger" type="submit">Set a new password</button>
+        </form>
+    </section>
+</div>

@@ -20,10 +20,12 @@ namespace ZimraEGS.Controllers
         private readonly FiscalService _fiscal;
         private readonly IWebHostEnvironment _environment;
         private readonly HsCodeCatalog _hsCodes;
+        private readonly BillingService _billing;
         private readonly ILogger<ExtensionController> _logger;
 
-        public ExtensionController(DeviceStore store, FiscalService fiscal, IWebHostEnvironment environment, HsCodeCatalog hsCodes, ILogger<ExtensionController> logger)
+        public ExtensionController(DeviceStore store, FiscalService fiscal, IWebHostEnvironment environment, HsCodeCatalog hsCodes, BillingService billing, ILogger<ExtensionController> logger)
         {
+            _billing = billing;
             _hsCodes = hsCodes;
             _store = store;
             _fiscal = fiscal;
@@ -117,7 +119,20 @@ namespace ZimraEGS.Controllers
             return context;
         }
 
-        private static object Day(Device device)
+        private object Billing(Device device)
+        {
+            var status = _billing.StatusOf(device);
+            return new
+            {
+                state = status.State.ToString(),
+                maySend = status.MaySend,
+                text = status.Describe(_billing.Options),
+                instructions = status.State is BillingState.Free or BillingState.Active ? null : _billing.Options.PaymentInstructions,
+                accountUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}/account",
+            };
+        }
+
+        private object Day(Device device)
         {
             bool open = device.FiscalDayStatus != FiscalDayStatus.FiscalDayClosed;
             var config = DeviceStore.GetConfig(device);
@@ -180,6 +195,7 @@ namespace ZimraEGS.Controllers
                 deviceLink = context.DeviceLink,
                 defaultMoneyType = context.Device!.DefaultMoneyType,
                 day = Day(context.Device),
+                billing = Billing(context.Device),
             };
         }
 
@@ -192,6 +208,7 @@ namespace ZimraEGS.Controllers
             deviceLink = context.DeviceLink,
             defaultMoneyType = context.Device?.DefaultMoneyType,
             day = context.Device == null ? null : Day(context.Device),
+            billing = context.Device == null ? null : Billing(context.Device),
         };
 
         /// <summary>Checks the open document and says what the page should show. Sends nothing to ZIMRA.</summary>
@@ -229,7 +246,16 @@ namespace ZimraEGS.Controllers
                         deviceLink = context.DeviceLink,
                         defaultMoneyType = context.Device.DefaultMoneyType,
                         day = Day(context.Device),
+                    billing = Billing(context.Device),
                     });
+                }
+
+                var billingStatus = _billing.StatusOf(context.Device);
+                if (!billingStatus.MaySend)
+                {
+                    return Json(NotReady(context,
+                        billingStatus.State == BillingState.NoAccount ? "This device is not linked to an account" : "The subscription has ended",
+                        [billingStatus.Describe(_billing.Options), _billing.Options.PaymentInstructions]));
                 }
 
                 var draft = await _fiscal.PreviewAsync(context.Device.Id, context.Relay);
@@ -256,6 +282,7 @@ namespace ZimraEGS.Controllers
                     deviceLink = context.DeviceLink,
                     defaultMoneyType = context.Device.DefaultMoneyType,
                     day = Day(context.Device),
+                    billing = Billing(context.Device),
                 });
             }
             catch (Exception ex)

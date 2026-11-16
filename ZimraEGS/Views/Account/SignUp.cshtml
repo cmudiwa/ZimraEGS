@@ -1,0 +1,19 @@
+@model AccountFormModel
+@{ ViewData["Title"] = "Create an account"; }
+<div class="pg narrow">
+    <h1>Create an account</h1>
+    <p class="sub">An account is needed for live (production) devices. Test devices are free and need none.</p>
+    @if (Model.Error != null) { <div class="msg bad" role="alert">@Model.Error</div> }
+    <form class="panel" asp-action="SignUp" method="post">
+        <label for="Name">Business name</label>
+        <input class="form-control" id="Name" name="Name" value="@Model.Name" required autocomplete="organization" />
+        <label for="Email">E-mail</label>
+        <input class="form-control" id="Email" name="Email" type="email" value="@Model.Email" required autocomplete="email" />
+        <label for="Phone">Phone (optional)</label>
+        <input class="form-control" id="Phone" name="Phone" value="@Model.Phone" autocomplete="tel" />
+        <label for="Password">Password (at least @ZimraEGS.Services.BillingService.MinimumPasswordLength characters)</label>
+        <input class="form-control" id="Password" name="Password" type="password" required minlength="@ZimraEGS.Services.BillingService.MinimumPasswordLength" autocomplete="new-password" />
+        <button class="btn btn-primary mt-3 w-100" type="submit">Create account</button>
+    </form>
+    <p class="muted">Already have an account? <a asp-action="SignIn">Sign in</a></p>
+</div>

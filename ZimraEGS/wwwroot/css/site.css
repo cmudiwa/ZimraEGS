@@ -269,3 +269,30 @@ input[readonly] {
         color: #f1f1f1; /* Lighter text for better contrast in dark mode */
     }
 }
+/* Account and admin pages */
+.pg { max-width: 980px; margin: 0 auto; text-align: start; padding: 8px 0 24px; }
+.pg.narrow { max-width: 460px; }
+.pg h1 { font-size: 1.6rem; font-weight: 700; margin: 0 0 6px; }
+.pg h2 { font-size: 1.1rem; font-weight: 700; margin: 0 0 12px; }
+.pg .sub { color: var(--bs-secondary-color, #6c757d); margin: 0 0 18px; }
+.pg .panel { background: var(--bs-body-bg, #fff); border: 1px solid var(--bs-border-color, #dee2e6); border-radius: 10px; padding: 20px 22px; margin-bottom: 16px; }
+.pg label { display: block; font-size: .875rem; color: var(--bs-secondary-color, #6c757d); margin: 10px 0 4px; }
+.pg .msg { border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; }
+.pg .msg.ok { background: rgba(31, 157, 85, .12); border: 1px solid rgba(31, 157, 85, .45); }
+.pg .msg.bad { background: rgba(192, 57, 43, .1); border: 1px solid rgba(192, 57, 43, .45); }
+.pg .msg.warn { background: rgba(232, 161, 0, .12); border: 1px solid rgba(232, 161, 0, .45); }
+.pg table.t { width: 100%; border-collapse: collapse; font-size: .95rem; }
+.pg table.t th, .pg table.t td { padding: 8px; border-bottom: 1px solid var(--bs-border-color, #dee2e6); text-align: start; vertical-align: top; font-weight: normal; }
+.pg table.t th { color: var(--bs-secondary-color, #6c757d); font-size: .85rem; }
+.pg table.t td.num, .pg table.t th.num { text-align: end; white-space: nowrap; }
+.pg .badge-s { display: inline-block; border-radius: 999px; padding: 2px 10px; font-size: .8rem; font-weight: 600; white-space: nowrap; }
+.pg .s-Free { background: #e9ecef; color: #495057; }
+.pg .s-Active { background: #d3f0df; color: #146c43; }
+.pg .s-EndingSoon, .pg .s-Grace { background: #fdecc8; color: #8a5300; }
+.pg .s-Expired, .pg .s-NoAccount { background: #f8d7da; color: #a52834; }
+.pg .muted { color: var(--bs-secondary-color, #6c757d); font-size: .9rem; }
+.pg .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0 16px; }
+.pg .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.pg .tabs a { padding: 4px 12px; border-radius: 999px; border: 1px solid var(--bs-border-color, #dee2e6); text-decoration: none; color: inherit; font-size: .9rem; }
+.pg .tabs a.on { background: var(--bs-secondary-bg, #e9ecef); font-weight: 600; }
+.pg .scroll { overflow-x: auto; }
