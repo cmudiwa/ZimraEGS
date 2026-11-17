@@ -1,0 +1,87 @@
+@model ExcelPageModel
+@{ ViewData["Title"] = "Invoices from Excel"; var d = Model.Selected; }
+<div class="pg">
+    <h1>Invoices from Excel</h1>
+    <p class="sub">Keep your invoices in Excel and fiscalise them with ZIMRA: download the template, fill it in, upload it, check and send. Each document is printed in ZIMRA's layout.</p>
+    @if (!string.IsNullOrEmpty(Model.Message)) { <div class="msg ok" role="status">@Model.Message</div> }
+    @if (!string.IsNullOrEmpty(Model.Error)) { <div class="msg bad" role="alert">@Model.Error</div> }
+
+    @if (Model.Devices.Count == 0)
+    {
+        <section class="panel">
+            <h2>Connect your fiscal device</h2>
+            <p class="muted">You need the Device ID, Serial Number and Activation Key that ZIMRA gave you. Start with a test device; ZIMRA approves a live one after seeing test documents.</p>
+            <a class="btn btn-primary" asp-action="Connect">Connect a device</a>
+        </section>
+    }
+    else
+    {
+        <section class="panel">
+            <h2>Device</h2>
+            <form method="get" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                <select class="form-select" name="device" style="max-width:420px" onchange="this.form.submit()" aria-label="Device">
+                    @foreach (var (dev, st) in Model.Devices)
+                    {
+                        <option value="@dev.Id" selected="@(dev.Id == d?.Id)">@dev.DeviceID · @(dev.Environment == ZimraEGS.ApiClient.Models.PlatformType.Production ? "Live" : "Test") · @ZimraEGS.Services.DeviceStore.GetInfo(dev).TaxPayerName</option>
+                    }
+                </select>
+                <a class="btn btn-outline-secondary btn-sm" asp-action="Connect">Connect another device</a>
+            </form>
+            @if (d != null)
+            {
+                var status = Model.Devices.First(x => x.device.Id == d.Id).status;
+                <p class="muted" style="margin:10px 0 0"><span class="badge-s s-@status.State">@ZimraEGS.Views.Account.Status.Label(status.State)</span> @status.Describe(Model.BillingOptions)</p>
+                <form asp-action="DefaultPayment" asp-route-id="@d.Id" method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-top:10px">
+                    <div><label for="defaultMoneyType">Default payment type (used when 'Paid by' is empty)</label>
+                        <select class="form-select" id="defaultMoneyType" name="defaultMoneyType">
+                            <option value="">None: 'Paid by' is required</option>
+                            @foreach (var (value, name) in MoneyTypeNames.All) { <option value="@value" selected="@(d.DefaultMoneyType == value)">@name</option> }
+                        </select></div>
+                    <button class="btn btn-outline-primary" type="submit">Save</button>
+                </form>
+            }
+        </section>
+
+        @if (d != null)
+        {
+            <section class="panel">
+                <h2>1. Download the template</h2>
+                <p class="muted">The template lists the taxes ZIMRA set for device @d.DeviceID, with drop-down lists and help on each column. Use it for this device only.</p>
+                <a class="btn btn-outline-primary" asp-action="Template" asp-route-device="@d.Id">Download template (.xlsx)</a>
+            </section>
+
+            <section class="panel">
+                <h2>2. Upload your invoices</h2>
+                <p class="muted">Nothing is sent yet: every document is checked first and you see the result.</p>
+                <form asp-action="Upload" method="post" enctype="multipart/form-data" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                    <input type="hidden" name="device" value="@d.Id" />
+                    <input class="form-control" type="file" name="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required style="max-width:420px" />
+                    <button class="btn btn-primary" type="submit">Upload and check</button>
+                </form>
+            </section>
+        }
+
+        <section class="panel">
+            <h2>Recent uploads</h2>
+            @if (Model.Batches.Count == 0) { <p class="muted" style="margin:0">None yet.</p> }
+            else
+            {
+                <div class="scroll"><table class="t">
+                    <thead><tr><th>File</th><th>Uploaded</th><th>Sent</th><th></th></tr></thead>
+                    <tbody>
+                    @foreach (var b in Model.Batches)
+                    {
+                        <tr>
+                            <td>@b.FileName</td>
+                            <td>@b.CreatedUtc.AddHours(2).ToString("d MMM yyyy HH:mm")</td>
+                            <td>@(b.SentUtc?.AddHours(2).ToString("d MMM yyyy HH:mm") ?? "Not yet")</td>
+                            <td class="num"><a class="btn btn-outline-primary btn-sm" asp-action="Batch" asp-route-id="@b.PublicId">Open</a></td>
+                        </tr>
+                    }
+                    </tbody>
+                </table></div>
+            }
+            <p class="muted" style="margin:10px 0 0">Uploaded workbooks are deleted after @Model.RetentionDays days. The fiscal documents are kept as the law requires; download your results workbook and print your documents before then.</p>
+        </section>
+    }
+</div>

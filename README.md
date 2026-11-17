@@ -116,6 +116,18 @@ Create a credit note that refers to the fiscalised invoice, enter the reason in 
 
 ---
 
+## Invoices from Excel
+
+Businesses that do not use Manager can fiscalise invoices kept in Excel, at `/excel` (sign-in needed):
+
+1. **Connect a device** with the Device ID, Serial Number and Activation Key from ZIMRA. It is registered from the server and linked to the account. A device already set up in the Manager panel can be connected with the same details: it is not registered again, and Manager and Excel share it.
+2. **Download the template** for the device. It has one row per invoice line, drop-down lists (including the taxes ZIMRA set for the device), and help on each column heading.
+3. **Upload** the filled-in workbook. Every document is checked first, with problems reported by row; nothing is sent until you press Send.
+4. **Send.** Documents go through the same checks, numbering, signing and fiscal day handling as Manager's. Invoices are sent before credit and debit notes, so a note can refer to an invoice in the same workbook. A document number already sent is never sent again.
+5. **Results.** Download the workbook with the fiscal number, status, verification code and QR link filled in, and print each document (or all) in ZIMRA's layout, with the same theme Manager uses. The printout is the fiscal document.
+
+Credit and debit notes give the original invoice (its fiscal number, or the customer's own number if it was sent from Excel) and a reason; prices stay positive. Uploaded workbooks are deleted after `Privacy:ExcelRetentionDays` (30); the fiscal documents are kept. At most 300 documents, 3,000 rows and 5 MB per upload.
+
 ## Subscriptions (live devices)
 
 Test devices are free. A live (production) device sends documents while its subscription is paid up:
@@ -166,7 +178,7 @@ What only you can do, listed with reminders on `/admin/privacy`: apply to POTRAZ
 | `Privacy:PotrazLicenceNumber` | Your POTRAZ data controller licence. |
 | `Privacy:HostingLocation` | Where the server and its data are, e.g. `Harare, Zimbabwe`. |
 | `Privacy:NoticeVersion` | Change it when the notice changes in substance. |
-| `Privacy:RecordsRetentionYears`, `AuditRetentionDays`, `LogRetentionDays` | How long records, the security log and log files are kept. |
+| `Privacy:RecordsRetentionYears`, `AuditRetentionDays`, `LogRetentionDays`, `ExcelRetentionDays` | How long records, the security log, log files and uploaded Excel workbooks are kept. |
 | `Security:HttpsOnly` | `true` once the server is served over https. |
 
 ## Key Points to Understand

@@ -891,6 +891,155 @@ public class FiscalFlowTests : IDisposable
         finally { Directory.Delete(logs, true); }
     }
 
+    // ---------------------------------------------------------------- Excel
+
+    private async Task<(Device device, ExcelService excel, FiscalDbContext db)> ExcelScopeAsync()
+    {
+        string link = await RegisterDeviceAsync();
+        var (service, store, db) = Scope();
+        var device = (await store.FindByLinkAsync(link))!;
+        await service.RefreshConfigAsync(device.Id);
+        db.ChangeTracker.Clear();
+        device = await db.Devices.FirstAsync(d => d.Id == device.Id);
+        return (device, new ExcelService(db, service), db);
+    }
+
+    /// <summary>The device's template with the example rows replaced by these rows (column header to value).</summary>
+    private static byte[] Workbook(Device device, params Dictionary<string, object>[] rows)
+    {
+        using var wb = new ClosedXML.Excel.XLWorkbook(new MemoryStream(ExcelInvoices.BuildTemplate(device)));
+        var ws = wb.Worksheet(ExcelInvoices.SheetName);
+        ws.Rows(2, 3).Delete();
+        var headers = ws.Row(1).CellsUsed().ToDictionary(c => c.GetString(), c => c.Address.ColumnNumber);
+        for (int r = 0; r < rows.Length; r++)
+            foreach (var (header, value) in rows[r])
+                ws.Cell(r + 2, headers[header]).Value = value switch { int i => i, decimal d => d, double d => d, _ => value.ToString() };
+        using var stream = new MemoryStream();
+        wb.SaveAs(stream);
+        return stream.ToArray();
+    }
+
+    private static Dictionary<string, object> Row(string type, string no, string desc, object qty, object price, string tax, string hs = "12345678",
+        string? original = null, string? reason = null, string? customer = "Buyer Ltd", string? tin = "2000000001") => new()
+    {
+        ["Type"] = type, ["Your invoice no."] = no, ["Currency"] = "USD", ["Customer name"] = customer ?? "", ["Customer TIN"] = tin ?? "",
+        ["Description"] = desc, ["HS code"] = hs, ["Quantity"] = qty, ["Unit price"] = price, ["Tax"] = tax, ["Paid by"] = "Cash",
+        ["Original invoice no."] = original ?? "", ["Reason"] = reason ?? "",
+    };
+
+    [Fact]
+    public async Task An_Excel_workbook_is_checked_sent_once_and_returned_with_results()
+    {
+        var (device, excel, db) = await ExcelScopeAsync();
+
+        // The template's own example rows are valid for the device.
+        var (examples, fileProblems) = ExcelInvoices.Read(new MemoryStream(ExcelInvoices.BuildTemplate(device)), device);
+        Assert.Empty(fileProblems);
+        var example = Assert.Single(examples);
+        Assert.Equal(2, example.Lines.Count);
+        Assert.Empty(example.Problems);
+
+        var bytes = Workbook(device,
+            Row("Invoice", "INV-1", "Widget", 2, 50, "3 - Standard rated 15%"),
+            Row("Invoice", "INV-1", "Bread", 4, 1.25, "2 - Zero rated 0%"),
+            Row("Invoice", "INV-2", "Service", 1, 10, "15%", customer: null, tin: null));
+        var (docs, problems) = ExcelInvoices.Read(new MemoryStream(bytes), device);
+        Assert.Empty(problems);
+        Assert.Equal(2, docs.Count);
+
+        var checks = await excel.CheckAsync(device, docs);
+        Assert.All(checks, c => Assert.True(c.Ready, string.Join("; ", c.Problems)));
+        Assert.Equal(120.00m, checks[0].Total);
+        Assert.Equal(0, _fdms.SubmitCalls);   // checking sends nothing
+
+        var results = await excel.SendAsync(device, docs);
+        Assert.Equal(2, _fdms.AllReceipts.Count);
+        Assert.Empty(_fdms.Violations);
+        Assert.Equal("APPROVED", results["inv-1"].Status);
+        Assert.Equal("12345-0001-0001", results["inv-1"].FiscalNumber);
+        Assert.Equal("INV-1", results["inv-1"].Reference);
+        Assert.Null(_fdms.AllReceipts[1].BuyerData);
+
+        // Uploading the same numbers again sends nothing.
+        var again = await excel.SendAsync(device, ExcelInvoices.Read(new MemoryStream(bytes), device).documents);
+        Assert.Equal(2, _fdms.AllReceipts.Count);
+        Assert.Contains("not sent again", again["inv-1"].Message);
+
+        // A credit note against INV-1, by the customer's own number; prices stay positive in the sheet.
+        var credit = Workbook(device, Row("Credit note", "CN-1", "Widget", 1, 50, "3 - Standard rated 15%", original: "INV-1", reason: "Goods returned"));
+        var creditResults = await excel.SendAsync(device, ExcelInvoices.Read(new MemoryStream(credit), device).documents);
+        Assert.Equal("APPROVED", creditResults["cn-1"].Status);
+        var sentCredit = _fdms.AllReceipts[2];
+        Assert.Equal(ReceiptType.CreditNote, sentCredit.ReceiptType);
+        Assert.Equal(-57.50m, sentCredit.ReceiptTotal);
+        Assert.Equal(1, sentCredit.CreditDebitNote.ReceiptGlobalNo);
+        Assert.Empty(_fdms.Violations);
+
+        // A debit note listed before its invoice in the same workbook: the invoice is sent first.
+        var together = Workbook(device,
+            Row("Debit note", "DN-1", "Widget", 1, 10, "3 - Standard rated 15%", original: "INV-3", reason: "Price corrected"),
+            Row("Invoice", "INV-3", "Widget", 1, 100, "3 - Standard rated 15%"));
+        var togetherDocs = ExcelInvoices.Read(new MemoryStream(together), device).documents;
+        Assert.All(await excel.CheckAsync(device, togetherDocs), c => Assert.True(c.Ready, string.Join("; ", c.Problems)));
+        var togetherResults = await excel.SendAsync(device, togetherDocs);
+        Assert.Equal("APPROVED", togetherResults["dn-1"].Status);
+        Assert.Equal(ReceiptType.DebitNote, _fdms.AllReceipts[4].ReceiptType);
+        Assert.Equal(11.50m, _fdms.AllReceipts[4].ReceiptTotal);
+        Assert.Empty(_fdms.Violations);
+
+        // The workbook comes back with the results, and the documents print in ZIMRA's layout.
+        var returned = ExcelInvoices.WriteResults(bytes, results);
+        using (var wb = new ClosedXML.Excel.XLWorkbook(new MemoryStream(returned)))
+        {
+            var ws = wb.Worksheet(ExcelInvoices.SheetName);
+            var headers = ws.Row(1).CellsUsed().ToDictionary(c => c.GetString(), c => c.Address.ColumnNumber);
+            Assert.Equal("12345-0001-0001", ws.Cell(3, headers["Fiscal invoice no."]).GetString());   // second row of INV-1
+            Assert.Equal("APPROVED", ws.Cell(4, headers["Status"]).GetString());
+            Assert.StartsWith("https://fdmstest.zimra.co.zw", ws.Cell(2, headers["QR link"]).GetString());
+        }
+        var row = await db.Receipts.AsNoTracking().FirstAsync(r => r.Id == creditResults["cn-1"].ReceiptRowId);
+        string page = ExcelPrint.Page([ExcelPrint.ViewData(device, row, "CN-1")]);
+        Assert.Contains("CREDIT NOTE", page);
+        Assert.Contains("renderDocument(d)", page);
+        Assert.DoesNotContain("/api4/view-v1", page);
+    }
+
+    [Fact]
+    public async Task Problems_in_a_workbook_are_reported_by_row_and_nothing_is_sent()
+    {
+        var (device, excel, _) = await ExcelScopeAsync();
+        var bytes = Workbook(device,
+            Row("Invoice", "A-1", "Widget", 0, 50, "3 - Standard rated 15%"),
+            Row("Invoice", "A-2", "Widget", 1, 50, "9 - Luxury tax"),
+            Row("Credit note", "C-1", "Widget", 1, 50, "3 - Standard rated 15%", original: "NOPE", reason: "Returned"),
+            Row("Bill", "B-1", "Widget", 1, 50, "3 - Standard rated 15%"),
+            Row("Invoice", "H-1", "Bread", 1, 1, "2 - Zero rated 0%", hs: "1905"));
+        var (docs, problems) = ExcelInvoices.Read(new MemoryStream(bytes), device);
+        Assert.Empty(problems);
+
+        var checks = await excel.CheckAsync(device, docs);
+        Assert.Contains(checks[0].Problems, p => p.StartsWith("Row 2:") && p.Contains("Quantity"));
+        Assert.Contains(checks[1].Problems, p => p.StartsWith("Row 3:") && p.Contains("is not one ZIMRA set"));
+        Assert.Contains(checks[2].Problems, p => p.Contains("no invoice \"NOPE\""));
+        Assert.Contains(checks[3].Problems, p => p.Contains("'Type' must be"));
+        Assert.Contains(checks[4].Problems, p => p.StartsWith("Row 6") && p.Contains("8-digit"));
+
+        var results = await excel.SendAsync(device, docs);
+        Assert.All(results.Values, r => Assert.Equal("NOT SENT", r.Status));
+        Assert.Equal(0, _fdms.SubmitCalls);
+
+        // A code typed into a number cell gets its leading zero back.
+        var numeric = Workbook(device, Row("Invoice", "N-1", "Horse", 1, 1, "3 - Standard rated 15%", hs: "x"));
+        using var wb = new ClosedXML.Excel.XLWorkbook(new MemoryStream(numeric));
+        var ws = wb.Worksheet(ExcelInvoices.SheetName);
+        int hsColumn = ws.Row(1).CellsUsed().First(c => c.GetString() == "HS code").Address.ColumnNumber;
+        ws.Cell(2, hsColumn).Value = 1012100;
+        using var saved = new MemoryStream();
+        wb.SaveAs(saved);
+        saved.Position = 0;
+        Assert.Equal("01012100", ExcelInvoices.Read(saved, device).documents.Single().Lines.Single().HsCode);
+    }
+
     [Fact]
     public async Task A_wrong_link_secret_is_not_accepted()
     {

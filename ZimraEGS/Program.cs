@@ -86,6 +86,8 @@ namespace ZimraEGS
             builder.Services.AddScoped<DeviceStore>();
             builder.Services.AddScoped<BillingService>();
             builder.Services.AddScoped<PrivacyService>();
+            builder.Services.AddScoped<DeviceRegistration>();
+            builder.Services.AddScoped<ExcelService>();
             builder.Services.AddSingleton(new LogDirectory(logDirectory));
             builder.Services.AddHostedService<PrivacyMaintenanceService>();
             builder.Services.AddScoped<FiscalService>();
@@ -139,7 +141,7 @@ namespace ZimraEGS
                 headers["X-Content-Type-Options"] = "nosniff";
                 headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
                 var path = context.Request.Path;
-                if (path.StartsWithSegments("/account") || path.StartsWithSegments("/admin"))
+                if (path.StartsWithSegments("/account") || path.StartsWithSegments("/admin") || path.StartsWithSegments("/excel"))
                 {
                     headers["X-Frame-Options"] = "DENY";
                     headers["Cache-Control"] = "no-store";

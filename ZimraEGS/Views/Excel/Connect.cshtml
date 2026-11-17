@@ -1,0 +1,28 @@
+@model ExcelConnectModel
+@{ ViewData["Title"] = "Connect a device"; }
+<div class="pg narrow">
+    <p class="muted" style="margin:0 0 6px"><a asp-action="Index">Invoices from Excel</a> / Connect a device</p>
+    <h1>Connect a device</h1>
+    <p class="sub">Enter what ZIMRA gave you for the fiscal device. The device is registered with ZIMRA from this server and linked to your account.</p>
+    @if (Model.Error != null) { <div class="msg bad" role="alert">@Model.Error</div> }
+    <form class="panel" asp-action="Connect" method="post">
+        <label for="Environment">Environment</label>
+        <select class="form-select" id="Environment" name="Environment">
+            <option value="Simulation" selected="@(Model.Environment == "Simulation")">Test</option>
+            <option value="Production" selected="@(Model.Environment == "Production")">Live (production)</option>
+        </select>
+        <label for="DeviceID">Device ID</label>
+        <input class="form-control" id="DeviceID" name="DeviceID" type="number" min="1" value="@(Model.DeviceID > 0 ? Model.DeviceID.ToString() : "")" required autocomplete="off" />
+        <label for="SerialNumber">Serial Number</label>
+        <input class="form-control" id="SerialNumber" name="SerialNumber" value="@Model.SerialNumber" required autocomplete="off" />
+        <label for="ActivationKey">Activation Key</label>
+        <input class="form-control" id="ActivationKey" name="ActivationKey" value="" required autocomplete="off" />
+        <label for="DefaultMoneyType">Default payment type (optional)</label>
+        <select class="form-select" id="DefaultMoneyType" name="DefaultMoneyType">
+            <option value="">None</option>
+            @foreach (var (value, name) in MoneyTypeNames.All) { <option value="@value" selected="@(Model.DefaultMoneyType == value)">@name</option> }
+        </select>
+        <button class="btn btn-primary mt-3 w-100" type="submit">Connect</button>
+    </form>
+    <p class="muted">A device already set up in the Manager panel can be connected here too, with the same details: it is not registered with ZIMRA a second time, and Manager and Excel then share it.</p>
+</div>

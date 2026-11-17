@@ -1,0 +1,100 @@
+@model ExcelBatchModel
+@{
+    ViewData["Title"] = Model.Batch.FileName;
+    int ready = Model.Checks.Count(c => c.Ready);
+    int fix = Model.Checks.Count(c => c.Problems.Count > 0);
+    int before = Model.Checks.Count(c => c.AlreadySent != null);
+    string Money(decimal? v) => v.HasValue ? v.Value.ToString("N2") : "-";
+}
+<div class="pg">
+    <p class="muted" style="margin:0 0 6px"><a asp-action="Index" asp-route-device="@Model.Device.Id">Invoices from Excel</a> / @Model.Batch.FileName</p>
+    <h1>@Model.Batch.FileName</h1>
+    <p class="sub">Device @Model.Device.DeviceID · @(Model.Device.Environment == ZimraEGS.ApiClient.Models.PlatformType.Production ? "Live" : "Test") · @ZimraEGS.Services.DeviceStore.GetInfo(Model.Device).TaxPayerName</p>
+
+    @if (Model.Results != null)
+    {
+        var sent = Model.Results.Count(r => r.Status is "APPROVED" or "REJECTED");
+        var notSent = Model.Results.Count(r => r.Status == "NOT SENT");
+        <div class="msg @(notSent == 0 ? "ok" : "warn")" role="status">
+            @sent of @Model.Results.Count document(s) fiscalised. @(notSent > 0 ? notSent + " not sent: see the message on each." : "")
+        </div>
+        <section class="panel">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+                <a class="btn btn-primary" asp-action="Workbook" asp-route-id="@Model.Batch.PublicId">Download workbook with results</a>
+                @if (sent > 0) { <a class="btn btn-outline-primary" asp-action="Print" asp-route-id="@Model.Batch.PublicId" target="_blank">Print all</a> }
+                @if (notSent > 0)
+                {
+                    <form asp-action="Again" asp-route-id="@Model.Batch.PublicId" method="post"><button class="btn btn-outline-secondary" type="submit">Check again and send the rest</button></form>
+                }
+            </div>
+            <div class="scroll"><table class="t">
+                <thead><tr><th>Your no.</th><th>Type</th><th>Fiscal no.</th><th>Status</th><th>Verification code</th><th>Message</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var r in Model.Results)
+                {
+                    var cls = r.Status == "APPROVED" ? "s-Active" : r.Status == "NOT SENT" ? "s-Expired" : "s-Grace";
+                    <tr>
+                        <td>@r.Reference</td><td>@r.Type</td><td class="nowrap">@r.FiscalNumber</td>
+                        <td><span class="badge-s @cls">@r.Status</span></td>
+                        <td class="nowrap">@r.VerificationCode</td>
+                        <td>@r.Message</td>
+                        <td class="num">@if (r.ReceiptRowId != null) { <a class="btn btn-outline-primary btn-sm" asp-action="Print" asp-route-id="@Model.Batch.PublicId" asp-route-doc="@r.Reference" target="_blank">Print</a> }</td>
+                    </tr>
+                }
+                </tbody>
+            </table></div>
+            <p class="muted" style="margin:10px 0 0">The printout is the fiscal document: give it to your customer or save it as PDF. Editing the workbook afterwards does not change what ZIMRA holds.</p>
+        </section>
+    }
+    else if (Model.FileProblems.Count > 0)
+    {
+        <div class="msg bad" role="alert">
+            The workbook cannot be used:
+            <ul style="margin:6px 0 0">@foreach (var p in Model.FileProblems) { <li>@p</li> }</ul>
+        </div>
+        <a class="btn btn-outline-primary" asp-action="Index" asp-route-device="@Model.Device.Id">Upload again</a>
+    }
+    else
+    {
+        <div class="msg @(fix == 0 ? "ok" : "warn")" role="status">
+            @Model.Checks.Count document(s): @ready ready to send@(fix > 0 ? $", {fix} to fix" : "")@(before > 0 ? $", {before} sent before (not sent again)" : "").
+            @if (fix > 0) { <span>Documents to fix are not sent. Correct them in Excel and upload again; the others can be sent now or with the corrected file.</span> }
+        </div>
+        @if (!Model.Billing.MaySend)
+        {
+            <div class="msg bad" role="alert">@Model.Billing.Describe(Model.BillingOptions) @Model.BillingOptions.PaymentInstructions <a href="/account">Your account</a></div>
+        }
+        <section class="panel">
+            <div class="scroll"><table class="t">
+                <thead><tr><th>Your no.</th><th>Type</th><th>Customer</th><th>Rows</th><th class="num">Total</th><th>Check</th></tr></thead>
+                <tbody>
+                @foreach (var c in Model.Checks)
+                {
+                    var doc = c.Document;
+                    <tr>
+                        <td>@doc.Reference</td>
+                        <td>@doc.TypeName</td>
+                        <td>@(string.IsNullOrEmpty(doc.BuyerName) ? "-" : doc.BuyerName)</td>
+                        <td>@string.Join(", ", doc.Rows)</td>
+                        <td class="num">@doc.Currency @Money(c.Total)</td>
+                        <td>
+                            @if (c.AlreadySent != null) { <span class="badge-s s-Free">Sent before</span> <span class="muted">@c.AlreadySent.InvoiceNo</span> }
+                            else if (c.Problems.Count == 0) { <span class="badge-s s-Active">Ready</span> @if (c.AfterInvoice != null) { <span class="muted">sent after @c.AfterInvoice</span> } }
+                            else { <ul class="muted" style="margin:0;padding-left:1rem">@foreach (var p in c.Problems) { <li>@p</li> }</ul> }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table></div>
+        </section>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+            @if (ready > 0 && Model.Billing.MaySend)
+            {
+                <form asp-action="Send" asp-route-id="@Model.Batch.PublicId" method="post" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='Sending…';">
+                    <button class="btn btn-primary" type="submit">Send @ready document(s) to ZIMRA</button>
+                </form>
+            }
+            <a class="btn btn-outline-secondary" asp-action="Index" asp-route-device="@Model.Device.Id">Upload a corrected file</a>
+        </div>
+    }
+</div>

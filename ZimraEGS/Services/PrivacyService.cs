@@ -39,6 +39,9 @@ namespace ZimraEGS.Services
 
         /// <summary>Server log files are deleted after this many days.</summary>
         public int LogRetentionDays { get; set; } = 90;
+
+        /// <summary>Uploaded Excel workbooks are deleted after this many days. The fiscal documents are kept.</summary>
+        public int ExcelRetentionDays { get; set; } = 30;
     }
 
     public class PrivacyService
@@ -136,6 +139,7 @@ namespace ZimraEGS.Services
             int devices = account.Devices.Count;
             foreach (var d in account.Devices) { d.AccountId = null; d.UpdatedUtc = DateTime.UtcNow; }
             _db.Accounts.Remove(account);
+            await _db.ExcelBatches.Where(b => b.AccountId == accountId).ExecuteDeleteAsync();
 
             string replacement = $"deleted account {accountId}";
             await _db.AuditEvents.Where(e => e.Actor == email).ExecuteUpdateAsync(u => u.SetProperty(e => e.Actor, replacement));
@@ -149,6 +153,8 @@ namespace ZimraEGS.Services
             var now = nowUtc ?? DateTime.UtcNow;
             var auditCutoff = now.AddDays(-Math.Max(1, _options.AuditRetentionDays));
             int removed = await _db.AuditEvents.Where(e => e.Utc < auditCutoff).ExecuteDeleteAsync();
+            var excelCutoff = now.AddDays(-Math.Max(1, _options.ExcelRetentionDays));
+            removed += await _db.ExcelBatches.Where(b => b.CreatedUtc < excelCutoff).ExecuteDeleteAsync();
 
             if (!string.IsNullOrEmpty(logDirectory) && Directory.Exists(logDirectory))
             {

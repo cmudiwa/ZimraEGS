@@ -2,6 +2,7 @@ using Newtonsoft.Json;
 using ZimraEGS.ApiClient.Enums;
 using ZimraEGS.ApiClient.Helpers;
 using ZimraEGS.ApiClient.Models;
+using ZimraEGS.Data;
 using ZimraEGS.Helpers;
 using ZimraEGS.Services;
 
@@ -139,6 +140,61 @@ namespace ZimraEGS.Models
             relay.DetermineInvoiceType(merged);
             return relay;
         }
+        /// <summary>
+        /// Builds the same data from a document read from an Excel workbook. For a credit or debit note,
+        /// <paramref name="original"/> is the fiscalised invoice it refers to.
+        /// </summary>
+        public static RelayData FromSpreadsheet(ExcelDocument doc, Device device, FiscalReceipt? original)
+        {
+            // Debit notes are kept like Manager keeps them (negative prices), so both routes share one builder.
+            decimal priceSign = doc.Type == ReceiptType.DebitNote ? -1 : 1;
+            var relay = new RelayData
+            {
+                Referrer = doc.Type == ReceiptType.FiscalInvoice ? "excel://invoice" : "excel://credit-note-view",
+                FormKey = ExcelDocument.FormKeyFor(doc.Reference),
+                ReceiptType = doc.Type,
+                CurrencyCode = doc.Currency,
+                ReceiptPrintForm = "InvoiceA4",
+                ReceiptNotes = doc.Reason,
+                PaymentType1 = doc.MoneyType is { } m ? $"{(int)m} - {m}" : string.Empty,
+                BuyerRegisterName = doc.BuyerName,
+                BuyerTIN = doc.BuyerTin,
+                BuyerVatNumber = doc.BuyerVat,
+                BuyerEmail = doc.BuyerEmail,
+                BuyerPhoneNo = doc.BuyerPhone,
+                BuyerStreet = doc.BuyerStreet,
+                BuyerCity = doc.BuyerCity,
+                BuyerProvince = doc.BuyerProvince,
+                ManagerInvoice = new ManagerInvoice
+                {
+                    Reference = doc.Reference,
+                    AmountsIncludeTax = doc.TaxInclusive,
+                    Lines = doc.Lines.Select(l => new Line
+                    {
+                        LineDescription = l.Description,
+                        Qty = l.Quantity,
+                        UnitPrice = priceSign * l.UnitPrice,
+                        DiscountAmount = l.Discount,
+                        TaxCode = l.TaxID is { } id ? new TaxCode { Name = $"{l.TaxName} — {id} —", Rate = l.TaxPercent ?? 0 } : null!,
+                        CustomFields2 = new CustomFields2 { Strings = new Dictionary<string, string> { [ManagerCustomField.HsCodeGuid] = l.HsCode } },
+                    }).ToList(),
+                },
+            };
+
+            if (original != null)
+            {
+                relay.DeviceIDRef = device.DeviceID;
+                relay.DeviceSNRef = device.SerialNumber;
+                relay.FiscalDayNoRef = original.FiscalDayNo;
+                relay.ReceiptCounterRef = original.ReceiptCounter;
+                relay.ReceiptGlobalNoRef = original.ReceiptGlobalNo;
+                relay.ReceiptRefNo = original.InvoiceNo;
+                relay.ReceiptID = original.FdmsReceiptId ?? 0;
+                relay.ReceiptRefDate = TimeZoneHelper.ParseFdmsString(original.ReceiptDate) ?? DateTimeOffset.MinValue;
+            }
+            return relay;
+        }
+
         private void InitializeBusinessData(string jsonBusiness)
         {
             DeviceLinkRaw = RelayDataHelper.GetStringCustomField2Value(jsonBusiness, ManagerCustomField.CertificateInfoGuid) ?? string.Empty;

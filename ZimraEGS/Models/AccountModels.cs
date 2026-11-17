@@ -73,3 +73,46 @@ namespace ZimraEGS.Models
         public string? Message { get; set; }
     }
 }
+
+namespace ZimraEGS.Models
+{
+    public class ExcelPageModel
+    {
+        public List<(Data.Device device, Services.BillingStatus status)> Devices { get; set; } = [];
+        public Data.Device? Selected { get; set; }
+        public List<Data.ExcelBatch> Batches { get; set; } = [];
+        public Services.BillingOptions BillingOptions { get; set; } = new();
+        public int RetentionDays { get; set; }
+        public string? Error { get; set; }
+        public string? Message { get; set; }
+    }
+
+    public class ExcelConnectModel
+    {
+        public string Environment { get; set; } = "Simulation";
+        public int DeviceID { get; set; }
+        public string SerialNumber { get; set; } = string.Empty;
+        public string ActivationKey { get; set; } = string.Empty;
+        public int? DefaultMoneyType { get; set; }
+        public string? Error { get; set; }
+    }
+
+    public class ExcelBatchModel
+    {
+        public Data.ExcelBatch Batch { get; set; } = new();
+        public Data.Device Device { get; set; } = new();
+        public Services.BillingStatus Billing { get; set; } = new(Services.BillingState.Free, null, null);
+        public Services.BillingOptions BillingOptions { get; set; } = new();
+        public List<string> FileProblems { get; set; } = [];
+        public List<Services.ExcelCheck> Checks { get; set; } = [];
+        public List<Services.ExcelResult>? Results { get; set; }
+    }
+
+    public static class MoneyTypeNames
+    {
+        public static readonly (int value, string name)[] All =
+        [
+            (0, "Cash"), (1, "Card"), (2, "Mobile wallet"), (3, "Coupon"), (4, "Credit"), (5, "Bank transfer"), (6, "Other"),
+        ];
+    }
+}

@@ -18,9 +18,11 @@ namespace ZimraEGS.Controllers
         private readonly FiscalDbContext _db;
         private readonly IFdmsClientFactory _clientFactory;
         private readonly BillingService _billing;
+        private readonly DeviceRegistration _registration;
 
-        public SetupController(ILogger<SetupController> logger, DeviceStore store, FiscalDbContext db, IFdmsClientFactory clientFactory, BillingService billing)
+        public SetupController(ILogger<SetupController> logger, DeviceStore store, FiscalDbContext db, IFdmsClientFactory clientFactory, BillingService billing, DeviceRegistration registration)
         {
+            _registration = registration;
             _billing = billing;
             _logger = logger;
             _store = store;
@@ -113,73 +115,9 @@ namespace ZimraEGS.Controllers
 
             try
             {
-                string modelName = string.IsNullOrWhiteSpace(request.DeviceModelName) ? "Server" : request.DeviceModelName.Trim();
-                string modelVersion = string.IsNullOrWhiteSpace(request.DeviceModelVersion) ? "v1" : request.DeviceModelVersion.Trim();
-                string activationHash = DeviceStore.HashToken(request.ActivationKey.Trim());
-
-                var device = await _store.FindAsync(environment, request.DeviceID);
-
-                // Setup was run before with the same activation key (for example the save in Manager failed):
-                // the device is already registered, so only hand out a new link.
-                bool alreadyRegistered = device != null && !string.IsNullOrEmpty(device.ProtectedPfx) &&
-                    string.Equals(device.ActivationKeyHash, activationHash, StringComparison.Ordinal);
-
-                if (!alreadyRegistered)
-                {
-                    string commonName = $"ZIMRA-{request.DeviceSerialNumber.Trim()}-{request.DeviceID.ToString().PadLeft(10, '0')}";
-                    var (csr, privateKey) = RSA_CryptoHelper.GenerateCSR(commonName);
-
-                    using ApiHelper publicClient = _clientFactory.CreatePublicClient(environment);
-                    ServerResponse registered = await publicClient.RegisterDeviceAsync(request.DeviceID, modelName, modelVersion,
-                        new RegisterDeviceRequest { ActivationKey = request.ActivationKey.Trim(), CertificateRequest = csr });
-
-                    if (!registered.IsSuccess)
-                    {
-                        return BadRequest(new { Error = "ZIMRA did not register the device: " + registered.DescribeError() });
-                    }
-
-                    string certificate = Utilities.CleanBase64String(registered.GetContentAs<RegisterDeviceResponse>().Certificate);
-                    string cleanKey = Utilities.CleanBase64String(privateKey);
-
-                    if (device == null)
-                    {
-                        device = new Device { DeviceID = request.DeviceID, Environment = environment };
-                        _db.Devices.Add(device);
-                    }
-
-                    // The private key is created here and never leaves the server.
-                    device.ProtectedPrivateKey = _store.Protect(cleanKey);
-                    device.ProtectedPfx = _store.Protect(Utilities.GeneratePfx(cleanKey, certificate, null));
-                    device.DeviceCertificate = certificate;
-                    device.GeneratedCsr = Utilities.CleanBase64String(csr);
-                    device.ActivationKeyHash = activationHash;
-                    device.IsActive = false;
-                }
-
-                device!.SerialNumber = request.DeviceSerialNumber.Trim();
-                device.ModelName = modelName;
-                device.ModelVersion = modelVersion;
-                if (request.DefaultMoneyType is { } moneyType && Enum.IsDefined(typeof(MoneyType), moneyType))
-                {
-                    device.DefaultMoneyType = moneyType;
-                }
-                await _db.SaveChangesAsync();
-
-                using var client = _clientFactory.CreateDeviceClient(device.Environment, device.DeviceID, device.ModelName, device.ModelVersion, _store.Unprotect(device.ProtectedPfx));
-                ServerResponse configResponse = await client.GetConfigAsync();
-                if (!configResponse.IsSuccess)
-                {
-                    return BadRequest(new { Error = "The device is registered, but ZIMRA did not return its configuration: " + configResponse.DescribeError() + " Click the button again to retry." });
-                }
-
-                GetConfigResponse config = configResponse.GetContentAs<GetConfigResponse>();
-                var info = InfoFromConfig(device, config);
-
-                device.ConfigJson = JsonConvert.SerializeObject(config);
-                device.ConfigFetchedUtc = DateTime.UtcNow;
-                _store.ApplyCertificateInfo(device, info);
-                device.IsActive = true;
-                await _db.SaveChangesAsync();
+                var (device, info, failure) = await _registration.RegisterAsync(environment, request.DeviceID, request.DeviceSerialNumber,
+                    request.ActivationKey, request.DeviceModelName, request.DeviceModelVersion, request.DefaultMoneyType);
+                if (device == null) return BadRequest(new { Error = failure });
 
                 if (account != null && device.AccountId != account.Id)
                 {
@@ -191,7 +129,7 @@ namespace ZimraEGS.Controllers
 
                 // Start from the business details Manager relayed, so nothing the user entered there is lost.
                 string businessDetails = string.IsNullOrWhiteSpace(request.BusinessDetailsJson) ? "{}" : request.BusinessDetailsJson;
-                businessDetails = RelayDataHelper.UpdateOrCreateField(businessDetails, "Name", info.TaxPayerName ?? string.Empty);
+                businessDetails = RelayDataHelper.UpdateOrCreateField(businessDetails, "Name", info!.TaxPayerName ?? string.Empty);
                 businessDetails = RelayDataHelper.UpdateOrCreateField(businessDetails, "Address", info.ToBusinessAddress());
 
                 var payload = new
@@ -210,35 +148,6 @@ namespace ZimraEGS.Controllers
             {
                 return StatusCode(502, new { Error = "ZIMRA could not be reached: " + ex.Message + " Click the button again to retry." });
             }
-        }
-
-        private static CertificateInfo InfoFromConfig(Device device, GetConfigResponse config)
-        {
-            return new CertificateInfo
-            {
-                IntegrationType = device.Environment,
-                DeviceID = device.DeviceID,
-                DeviceSerialNumber = device.SerialNumber,
-                DeviceModelName = device.ModelName,
-                DeviceModelVersion = device.ModelVersion,
-                CommonName = $"ZIMRA-{device.SerialNumber}-{device.DeviceID.ToString().PadLeft(10, '0')}",
-                TaxPayerName = config.TaxPayerName,
-                TaxPayerTIN = config.TaxPayerTIN,
-                VatNumber = config.VatNumber ?? string.Empty,
-                DeviceBranchName = config.DeviceBranchName,
-                Province = config.DeviceBranchAddress?.Province ?? string.Empty,
-                City = config.DeviceBranchAddress?.City ?? string.Empty,
-                Street = config.DeviceBranchAddress?.Street ?? string.Empty,
-                HouseNo = config.DeviceBranchAddress?.HouseNo ?? string.Empty,
-                PhoneNo = config.DeviceBranchContacts?.PhoneNo ?? string.Empty,
-                Email = config.DeviceBranchContacts?.Email ?? string.Empty,
-                DeviceOperatingMode = (int)config.DeviceOperatingMode,
-                ApplicableTaxes = string.Join("#", config.ApplicableTaxes.Select(x => $"{x.TaxID} - {x.TaxName} - {x.TaxPercent}")),
-                TaxPayerDayMaxHrs = config.TaxPayerDayMaxHrs,
-                TaxpayerDayEndNotificationHrs = config.TaxpayerDayEndNotificationHrs,
-                QrUrl = config.QrUrl,
-                CertificateValidTill = config.CertificateValidTill,
-            };
         }
 
         private static bool TryValidate(DeviceSetupRequest? request, out PlatformType environment, out string error)

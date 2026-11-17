@@ -133,6 +133,25 @@ namespace ZimraEGS.Data
         public DateTime RecordedUtc { get; set; } = DateTime.UtcNow;
     }
 
+    /// <summary>
+    /// A workbook uploaded on the Excel page, kept so it can be sent after checking and returned with the results.
+    /// Deleted after Privacy:ExcelRetentionDays; the fiscal documents themselves are kept as receipts.
+    /// </summary>
+    public class ExcelBatch
+    {
+        public int Id { get; set; }
+        /// <summary>Random, used in links instead of the number.</summary>
+        public string PublicId { get; set; } = Guid.NewGuid().ToString("N");
+        public int AccountId { get; set; }
+        public int DeviceRowId { get; set; }
+        public string FileName { get; set; } = string.Empty;
+        public byte[] Content { get; set; } = [];
+        /// <summary>Outcome per document (ExcelResult by lower-case reference), as JSON. Empty until sent.</summary>
+        public string ResultsJson { get; set; } = string.Empty;
+        public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
+        public DateTime? SentUtc { get; set; }
+    }
+
     public static class ReceiptStatus
     {
         /// <summary>Numbers reserved and receipt signed, FDMS outcome not known yet.</summary>
@@ -190,11 +209,13 @@ namespace ZimraEGS.Data
         public DbSet<Account> Accounts => Set<Account>();
         public DbSet<SubscriptionPayment> SubscriptionPayments => Set<SubscriptionPayment>();
         public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
+        public DbSet<ExcelBatch> ExcelBatches => Set<ExcelBatch>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<Account>(e => e.HasIndex(a => a.Email).IsUnique());
             modelBuilder.Entity<AuditEvent>(e => { e.HasIndex(a => a.Utc); e.HasIndex(a => a.AccountId); });
+            modelBuilder.Entity<ExcelBatch>(e => { e.HasIndex(b => b.PublicId).IsUnique(); e.HasIndex(b => b.AccountId); e.HasIndex(b => b.CreatedUtc); });
             modelBuilder.Entity<SubscriptionPayment>(e =>
             {
                 e.HasOne(p => p.Device).WithMany().HasForeignKey(p => p.DeviceRowId);
