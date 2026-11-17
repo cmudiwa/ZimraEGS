@@ -78,7 +78,7 @@ namespace ZimraEGS.Services
             theme = Replace(theme, "</style>", @"body { flex-direction: column; align-items: center; }
 .toolbar { margin: 1rem 0 0; }
 .toolbar button { font: 14px Arial, sans-serif; padding: 8px 16px; border-radius: 6px; border: 1px solid #b71c1c; background: #b71c1c; color: #fff; cursor: pointer; }
-@media print { main + main { break-before: page; } }
+@media print { main ~ main { break-before: page; } }
 </style>");
 
             int fetchAt = theme.IndexOf("fetch('/api4/view-v1'", StringComparison.Ordinal);
