@@ -137,6 +137,7 @@ Test devices are free. A live (production) device sends documents while its subs
 - **What stops, and what never does.** When a subscription has ended and the grace period (`Billing:GraceDays`, 7) is over, new documents are not sent to ZIMRA and the panel says so with a link to the account. A receipt whose answer from ZIMRA was lost is still sent, closing the fiscal day (by hand or automatically) still works, and fiscalised documents can still be opened and printed. A lapsed payment never breaks the fiscal chain or leaves a day open.
 - **Warnings.** The panel warns from `Billing:WarnDays` (7) days before the paid period ends.
 - **Customers** see their devices, paid-until dates and payments at `/account`, and can change their password. A customer who forgot their password gets a new one from an administrator (`/admin`, open the customer, "Set a new password").
+- **Administrator's own password.** On the server, stop the program and run `dotnet run --project ZimraEGS -- reset-password you@example.com`. It prints a new password for that account; sign in with it and change it.
 
 Put your own settings in `ZimraEGS/appsettings.Local.json` (create it next to `appsettings.json`). It overrides `appsettings.json` and is not part of the repository, so `git pull` never conflicts with it. For example:
 

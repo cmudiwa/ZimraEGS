@@ -17,6 +17,20 @@ namespace ZimraEGS
         {
             Console.OutputEncoding = System.Text.Encoding.UTF8;
 
+            // "reset-password you@example.com": sets a new password for an account and prints it, then exits.
+            // Only someone who can run commands on this server can use it, so it also works for the administrator.
+            string? resetEmail = null;
+            if (args.Length > 0 && string.Equals(args[0], "reset-password", StringComparison.OrdinalIgnoreCase))
+            {
+                if (args.Length < 2)
+                {
+                    Console.WriteLine("Usage: dotnet run --project ZimraEGS -- reset-password you@example.com");
+                    return;
+                }
+                resetEmail = args[1];
+                args = args[2..];
+            }
+
             var builder = WebApplication.CreateBuilder(args);
 
             // Your own settings (admin e-mail, business details, ...) go in appsettings.Local.json next to
@@ -119,6 +133,27 @@ namespace ZimraEGS
             using (var scope = app.Services.CreateScope())
             {
                 scope.ServiceProvider.GetRequiredService<FiscalDbContext>().Database.Migrate();
+            }
+
+            if (resetEmail != null)
+            {
+                using var scope = app.Services.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<FiscalDbContext>();
+                string email = BillingService.NormaliseEmail(resetEmail);
+                var account = db.Accounts.FirstOrDefault(a => a.Email == email);
+                if (account == null)
+                {
+                    Console.WriteLine($"There is no account with the e-mail address {email}.");
+                    Console.WriteLine("Accounts: " + string.Join(", ", db.Accounts.Select(a => a.Email).ToList()));
+                    return;
+                }
+                string password = scope.ServiceProvider.GetRequiredService<BillingService>().ResetPasswordAsync(account.Id).GetAwaiter().GetResult();
+                scope.ServiceProvider.GetRequiredService<PrivacyService>()
+                    .LogAsync("server console", "password reset on the server", account.Id).GetAwaiter().GetResult();
+                Console.WriteLine();
+                Console.WriteLine($"New password for {email}: {password}");
+                Console.WriteLine("Sign in with it, then change it on your account page.");
+                return;
             }
 
             // Configure the HTTP request pipeline.
