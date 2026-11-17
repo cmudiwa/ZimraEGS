@@ -116,6 +116,55 @@ Create a credit note that refers to the fiscalised invoice, enter the reason in 
 
 ---
 
+## Self-hosting on a Linux server (for example Hetzner)
+
+The app is one ASP.NET Core 8 program with its own SQLite database: no separate database server is needed. Run **one** copy; it closes fiscal days on a timer.
+
+1. **Server.** Ubuntu 24.04, 2 GB RAM is enough. Open ports 22, 80 and 443 only. Point a domain (for example `fiscal.example.com`) at the server's IP address.
+2. **Install .NET and Caddy** (Caddy gets and renews the https certificate by itself):
+   ```bash
+   sudo apt update && sudo apt install -y dotnet-sdk-8.0 caddy git sqlite3
+   ```
+3. **User, folders and the app:**
+   ```bash
+   sudo useradd --system --create-home --home-dir /var/lib/zimraegs zimraegs
+   sudo git clone -b claude/peaceful-bell-yss965 https://github.com/cmudiwa/ZimraEGS.git /opt/zimraegs-src
+   sudo dotnet publish /opt/zimraegs-src/ZimraEGS -c Release -o /opt/zimraegs
+   ```
+4. **Your settings** in `/opt/zimraegs/appsettings.Local.json` (admin e-mail, `Privacy` details, and `"Security": { "HttpsOnly": true }`).
+5. **Service** `/etc/systemd/system/zimraegs.service`:
+   ```ini
+   [Unit]
+   Description=Fiscal Managerio
+   After=network-online.target
+
+   [Service]
+   User=zimraegs
+   WorkingDirectory=/opt/zimraegs
+   ExecStart=/usr/bin/dotnet /opt/zimraegs/ZimraEGS.dll --urls http://127.0.0.1:5065
+   Environment=DataDirectory=/var/lib/zimraegs/data
+   Environment=ASPNETCORE_ENVIRONMENT=Production
+   Restart=always
+   RestartSec=5
+
+   [Install]
+   WantedBy=multi-user.target
+   ```
+   ```bash
+   sudo systemctl daemon-reload && sudo systemctl enable --now zimraegs
+   ```
+6. **https** in `/etc/caddy/Caddyfile`, then `sudo systemctl reload caddy`:
+   ```
+   fiscal.example.com {
+       reverse_proxy 127.0.0.1:5065
+   }
+   ```
+   The app trusts the `X-Forwarded-Proto` and `X-Forwarded-For` headers of a proxy on the same machine.
+7. **Backups.** `/var/lib/zimraegs/data` holds the database and the key ring that decrypts the device keys: back up both, together, every day, and keep a copy off the server. `sqlite3 zimraegs.db ".backup copy.db"` copies the database safely while the app runs.
+8. **Updates:** `git -C /opt/zimraegs-src pull`, publish again as in step 3, then `sudo systemctl restart zimraegs`. `appsettings.Local.json` and the data folder are not touched.
+
+Logs: `journalctl -u zimraegs -f`, and daily files under `/var/lib/zimraegs/LogFiles`.
+
 ## Invoices from Excel
 
 Businesses that do not use Manager can fiscalise invoices kept in Excel, at `/excel` (sign-in needed):

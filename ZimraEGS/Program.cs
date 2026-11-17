@@ -130,6 +130,14 @@ namespace ZimraEGS
 
             var app = builder.Build();
 
+            // Behind a reverse proxy on the same machine (Caddy, nginx) that handles https: trust its
+            // X-Forwarded-Proto and X-Forwarded-For, so the app knows the visitor used https and logs their real address.
+            var forwarded = new ForwardedHeadersOptions
+            {
+                ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto,
+            };
+            app.UseForwardedHeaders(forwarded);
+
             using (var scope = app.Services.CreateScope())
             {
                 scope.ServiceProvider.GetRequiredService<FiscalDbContext>().Database.Migrate();
