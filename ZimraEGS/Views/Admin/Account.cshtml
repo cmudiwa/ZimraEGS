@@ -22,7 +22,7 @@
                 @foreach (var (d, s) in Model.Devices)
                 {
                     <tr>
-                        <td>@d.DeviceID</td><td>@(d.Environment == ZimraEGS.ApiClient.Models.PlatformType.Production ? "Live" : "Test")</td>
+                        <td class="code">@d.DeviceID</td><td>@(d.Environment == ZimraEGS.ApiClient.Models.PlatformType.Production ? "Live" : "Test")</td>
                         <td><span class="badge-s s-@s.State">@ZimraEGS.Views.Account.Status.Label(s.State)</span></td>
                         <td class="num">@(d.PaidUntilUtc?.AddHours(2).ToString("d MMM yyyy") ?? "-")</td>
                         <td class="num"><a class="btn btn-outline-primary btn-sm" asp-action="Device" asp-route-id="@d.Id">Open</a></td>

@@ -311,15 +311,16 @@ input[readonly] {
     --bs-focus-ring-color: rgba(var(--brand-rgb), .25);
 }
 [data-bs-theme=dark] {
-    --brand: #ef5350;
-    --brand-hover: #f47c7a;
-    --brand-rgb: 239, 83, 80;
+    /* 5.9:1 on the dark page, 5.1:1 on the dark footer. */
+    --brand: #f47c7a;
+    --brand-hover: #ff9d9a;
+    --brand-rgb: 244, 124, 122;
     --bs-primary: var(--brand);
     --bs-primary-rgb: var(--brand-rgb);
     --bs-link-color: var(--brand);
     --bs-link-color-rgb: var(--brand-rgb);
     --bs-link-hover-color: var(--brand-hover);
-    --bs-link-hover-color-rgb: 244, 124, 122;
+    --bs-link-hover-color-rgb: 255, 157, 154;
     --bs-focus-ring-color: rgba(var(--brand-rgb), .3);
 }
 .brand-bar { background: linear-gradient(90deg, #8b0000, #c62828); }
@@ -331,20 +332,104 @@ input[readonly] {
     --bs-btn-disabled-bg: #b71c1c; --bs-btn-disabled-border-color: #b71c1c;
     --bs-btn-focus-shadow-rgb: 183, 28, 28;
 }
+/* Secondary actions are ink, not red: red is kept for the brand bar and the one main action per page. */
 .btn-outline-primary {
-    --bs-btn-color: var(--brand); --bs-btn-border-color: var(--brand);
-    --bs-btn-hover-color: #fff; --bs-btn-hover-bg: #b71c1c; --bs-btn-hover-border-color: #b71c1c;
-    --bs-btn-active-color: #fff; --bs-btn-active-bg: #8b0000; --bs-btn-active-border-color: #8b0000;
-    --bs-btn-focus-shadow-rgb: 183, 28, 28;
+    --bs-btn-color: var(--ink); --bs-btn-border-color: var(--ink-line);
+    --bs-btn-hover-color: var(--paper); --bs-btn-hover-bg: var(--ink); --bs-btn-hover-border-color: var(--ink);
+    --bs-btn-active-color: var(--paper); --bs-btn-active-bg: var(--ink); --bs-btn-active-border-color: var(--ink);
+    --bs-btn-focus-shadow-rgb: 100, 100, 100;
 }
 .form-control:focus, .form-select:focus { border-color: rgba(var(--brand-rgb), .6); box-shadow: 0 0 0 .25rem rgba(var(--brand-rgb), .2); }
 .form-check-input:checked { background-color: var(--brand); border-color: var(--brand); }
-.footer { border-top: 3px solid #b71c1c; }
-.pg .tabs a.on { background: rgba(var(--brand-rgb), .12); border-color: rgba(var(--brand-rgb), .5); color: var(--brand); }
-.pg h1, .home h1 { color: var(--brand); }
+.footer { border-top: 1px dashed var(--ink-line); }
+.pg .tabs a.on { background: var(--ink); border-color: var(--ink); color: var(--paper); }
 
 /* "Works with Manager.io" */
 .works-with { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; color: inherit; font-size: .95rem; }
 .works-with img { width: 28px; height: 28px; border-radius: 6px; }
 .brand-bar .works-with { color: #fff; opacity: .95; }
 .brand-bar .works-with:hover { opacity: 1; text-decoration: underline; }
+
+/* ------------------------------------------------------------------------------------------------
+   Receipt look: pages read like the fiscal receipt they produce. Paper panels on a tinted ground,
+   dotted rules, code-style numbers, and a QR-like mark on page titles.
+   Colour has one meaning each: red = brand and the main action; green with a tick = accepted or fine;
+   amber with "!" = needs attention; red tint with a cross = failed or blocked.
+   ------------------------------------------------------------------------------------------------ */
+:root, [data-bs-theme=light] {
+    --ink: #1f2328;
+    --ink-soft: #57606a;
+    --ink-line: #8c959f;
+    --paper: #ffffff;
+    --ground: #f2f0eb;
+    --rule: #b8b2a7;
+    --ok-bg: #dcf3e4; --ok-ink: #0f5c2e;
+    --warn-bg: #fdf0cf; --warn-ink: #6b4300;
+    --bad-bg: #fbe1e1; --bad-ink: #8a1c1c;
+}
+[data-bs-theme=dark] {
+    --ink: #e6e3dc;
+    --ink-soft: #b4b0a8;
+    --ink-line: #8f8a82;
+    --paper: #23262a;
+    --ground: #17191c;
+    --rule: #5c5850;
+    --ok-bg: #12361f; --ok-ink: #8fe0ab;
+    --warn-bg: #3a2c08; --warn-ink: #f5cf73;
+    --bad-bg: #401717; --bad-ink: #ffb4b0;
+}
+#maindiv { background: var(--ground); }
+.btn-outline-secondary { --bs-btn-color: var(--ink-soft); --bs-btn-border-color: var(--ink-line); --bs-btn-hover-bg: var(--ink-soft); --bs-btn-hover-border-color: var(--ink-soft); --bs-btn-hover-color: var(--paper); }
+.btn-outline-danger { --bs-btn-color: var(--bad-ink); --bs-btn-border-color: var(--bad-ink); --bs-btn-hover-bg: var(--bad-ink); --bs-btn-hover-border-color: var(--bad-ink); --bs-btn-hover-color: var(--paper); }
+
+/* Links: ink text with a red underline, so red still says "this is ours" without shouting. */
+.pg a:not(.btn), .home a:not(.btn) { color: var(--ink); text-decoration-color: var(--brand); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.pg a:not(.btn):hover, .home a:not(.btn):hover { color: var(--brand); }
+
+/* Titles: ink, with the QR-like mark. */
+.pg h1, .home h1 { color: var(--ink); display: flex; align-items: center; gap: 12px; letter-spacing: -.01em; }
+.pg h1::before, .home h1::before {
+    content: ""; flex: 0 0 auto; width: .95em; height: .95em; background: var(--brand);
+    -webkit-mask: url(/images/qr-mark.svg) center / contain no-repeat; mask: url(/images/qr-mark.svg) center / contain no-repeat;
+}
+.pg .sub, .home .lead-text { color: var(--ink-soft); }
+
+/* Panels are receipt paper; headings sit on a dotted rule. */
+.pg .panel, .home .panel { background: var(--paper); border: 1px solid var(--rule); border-radius: 3px; box-shadow: 0 1px 0 rgba(0, 0, 0, .04); }
+.pg .panel h2, .home .panel h2 { padding-bottom: 10px; border-bottom: 1px dashed var(--rule); font-size: .95rem; text-transform: uppercase; letter-spacing: .08em; }
+.pg table.t th, .pg table.t td, .home table.values th, .home table.values td { border-bottom: 1px dashed var(--rule); }
+.pg table.t th { text-transform: uppercase; letter-spacing: .06em; font-size: .72rem; }
+.pg table.t { font-variant-numeric: tabular-nums; }
+
+/* The signature: the panel that holds the outcome ends in a torn receipt edge. */
+.receipt { position: relative; border-bottom: 0 !important; padding-bottom: 30px !important;
+    -webkit-mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 14px 100%;
+            mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 14px 100%; }
+
+/* Numbers that identify things (fiscal numbers, verification codes, device IDs, amounts) read like the receipt. */
+.code, .home .stat .value, .pg td.num { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.code { font-weight: 600; }
+
+/* States: never colour alone. */
+.pg .badge-s { border-radius: 3px; text-transform: uppercase; letter-spacing: .05em; font-size: .72rem; padding: 3px 8px; }
+.pg .badge-s::before { margin-right: 5px; font-weight: 700; }
+.pg .s-Free { background: transparent; color: var(--ink-soft); border: 1px solid var(--ink-line); }
+.pg .s-Active { background: var(--ok-bg); color: var(--ok-ink); }
+.pg .s-Active::before { content: "\2713"; }
+.pg .s-EndingSoon, .pg .s-Grace { background: var(--warn-bg); color: var(--warn-ink); }
+.pg .s-EndingSoon::before, .pg .s-Grace::before { content: "!"; }
+.pg .s-Expired, .pg .s-NoAccount { background: var(--bad-bg); color: var(--bad-ink); }
+.pg .s-Expired::before, .pg .s-NoAccount::before { content: "\2715"; }
+.pg .msg { border-radius: 3px; color: var(--ink); }
+.pg .msg.ok { background: var(--ok-bg); border: 1px solid var(--ok-ink); }
+.pg .msg.warn { background: var(--warn-bg); border: 1px solid var(--warn-ink); }
+.pg .msg.bad { background: var(--bad-bg); border: 1px solid var(--bad-ink); }
+.pg .msg::before { font-weight: 700; margin-right: 6px; }
+.pg .msg.ok::before { content: "\2713"; color: var(--ok-ink); }
+.pg .msg.warn::before { content: "!"; color: var(--warn-ink); }
+.pg .msg.bad::before { content: "\2715"; color: var(--bad-ink); }
+.pg .muted { color: var(--ink-soft); }
+.navbar { margin-bottom: 0; }
+.pg td.num .btn, .pg td .btn { font-family: var(--bs-body-font-family); letter-spacing: normal; }
+.code, .pg .nowrap { white-space: nowrap; }
+.pg .tabs a.on:hover { color: var(--paper); }

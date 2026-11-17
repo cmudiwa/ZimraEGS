@@ -7,40 +7,40 @@
 <style>
     .home { max-width: 920px; margin: 0 auto; text-align: start; padding: 8px 0 24px; }
     .home h1 { font-size: 1.9rem; font-weight: 700; margin: 0 0 6px; }
-    .home .lead-text { font-size: 1.08rem; color: var(--bs-secondary-color, #6c757d); margin: 0 0 22px; max-width: 70ch; }
-    .home .panel { background: var(--bs-body-bg, #fff); border: 1px solid var(--bs-border-color, #dee2e6); border-radius: 10px; padding: 20px 22px; margin-bottom: 16px; }
-    .home h2 { font-size: 1.1rem; font-weight: 700; margin: 0 0 12px; }
+    .home .lead-text { font-size: 1.08rem; margin: 0 0 22px; max-width: 70ch; }
+    .home .panel { padding: 20px 22px; margin-bottom: 16px; }
+    .home h2 { font-weight: 700; margin: 0 0 12px; }
     .home .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); gap: 12px; }
-    .home .stat { border: 1px solid var(--bs-border-color, #dee2e6); border-radius: 8px; padding: 10px 12px; }
-    .home .stat .label { font-size: .8rem; color: var(--bs-secondary-color, #6c757d); }
+    .home .stat { border: 1px dashed var(--rule); border-radius: 3px; padding: 10px 12px; }
+    .home .stat .label { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-soft); }
     .home .stat .value { font-size: 1.15rem; font-weight: 600; margin-top: 2px; }
     .home .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; vertical-align: middle; }
     .home .dot.ok { background: #1f9d55; } .home .dot.bad { background: #c0392b; }
     .home table.values { width: 100%; border-collapse: collapse; }
-    .home table.values th, .home table.values td { padding: 9px 8px; border-bottom: 1px solid var(--bs-border-color, #dee2e6); vertical-align: middle; font-weight: normal; }
-    .home table.values th { width: 28%; color: var(--bs-secondary-color, #6c757d); }
+    .home table.values th, .home table.values td { padding: 9px 8px; vertical-align: middle; font-weight: normal; }
+    .home table.values th { width: 28%; color: var(--ink-soft); }
     .home table.values tr:last-child th, .home table.values tr:last-child td { border-bottom: 0; }
-    .home code.v { font-size: .95rem; color: var(--bs-body-color, #212529); background: var(--bs-tertiary-bg, #f1f3f5); padding: 2px 6px; border-radius: 4px; word-break: break-all; }
+    .home code.v { font-size: .95rem; color: var(--ink); background: var(--ground); padding: 2px 6px; border-radius: 3px; word-break: break-all; }
     .home .copy { margin-left: 8px; }
     .home ol.steps { margin: 0; padding-left: 1.3rem; }
     .home ol.steps li { margin-bottom: 10px; }
     .home ol.steps li strong { font-weight: 600; }
-    .home .notice { border-radius: 8px; padding: 10px 12px; margin: 12px 0 0; font-size: .95rem; }
-    .home .notice.warn { background: rgba(232, 161, 0, .12); border: 1px solid rgba(232, 161, 0, .45); }
+    .home .notice { border-radius: 3px; padding: 10px 12px; margin: 12px 0 0; font-size: .95rem; }
+    .home .notice.warn { background: var(--warn-bg); border: 1px solid var(--warn-ink); }
     .home ul.plain { margin: 0; padding-left: 1.1rem; }
     .home ul.plain li { margin-bottom: 6px; }
-    .home .muted { color: var(--bs-secondary-color, #6c757d); font-size: .9rem; }
+    .home .muted { color: var(--ink-soft); font-size: .9rem; }
 </style>
 
 <div class="home">
-    <h1 style="display:flex;align-items:center;gap:12px"><img src="~/images/manager-io.svg" alt="Manager.io" width="40" height="40" style="border-radius:8px">ZIMRA fiscalisation for Manager</h1>
+    <h1>ZIMRA fiscalisation for Manager</h1>
     <p class="lead-text">
         Fiscal Managerio sends Manager's sales invoices, credit notes and debit notes to ZIMRA's Fiscalisation Data Management
         System (FDMS), stores the QR code and receipt numbers on each document, and prints it in ZIMRA's layout.
         It works with <a href="https://www.manager.io" target="_blank" rel="noopener">Manager.io</a>, the desktop, server and cloud accounting software.
     </p>
 
-    <section class="panel" aria-labelledby="status-title">
+    <section class="panel receipt" aria-labelledby="status-title">
         <h2 id="status-title">This server</h2>
         <div class="status-grid">
             <div class="stat">

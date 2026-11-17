@@ -25,7 +25,7 @@
                 @foreach (var (d, s) in Model.Devices)
                 {
                     <tr>
-                        <td>@d.DeviceID<div class="muted">@d.SerialNumber</div></td>
+                        <td><span class="code">@d.DeviceID</span><div class="muted">@d.SerialNumber</div></td>
                         <td>@(d.Account?.Name ?? "-")<div class="muted">@d.Account?.Email</div></td>
                         <td>@(d.Environment == ZimraEGS.ApiClient.Models.PlatformType.Production ? "Live" : "Test")</td>
                         <td><span class="badge-s s-@s.State">@ZimraEGS.Views.Account.Status.Label(s.State)</span></td>

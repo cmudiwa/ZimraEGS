@@ -18,7 +18,7 @@
         <div class="msg @(notSent == 0 ? "ok" : "warn")" role="status">
             @sent of @Model.Results.Count document(s) fiscalised. @(notSent > 0 ? notSent + " not sent: see the message on each." : "")
         </div>
-        <section class="panel">
+        <section class="panel receipt">
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
                 <a class="btn btn-primary" asp-action="Workbook" asp-route-id="@Model.Batch.PublicId">Download workbook with results</a>
                 @if (sent > 0) { <a class="btn btn-outline-primary" asp-action="Print" asp-route-id="@Model.Batch.PublicId" target="_blank">Print all</a> }
@@ -34,9 +34,9 @@
                 {
                     var cls = r.Status == "APPROVED" ? "s-Active" : r.Status == "NOT SENT" ? "s-Expired" : "s-Grace";
                     <tr>
-                        <td>@r.Reference</td><td>@r.Type</td><td class="nowrap">@r.FiscalNumber</td>
+                        <td>@r.Reference</td><td>@r.Type</td><td class="nowrap code">@r.FiscalNumber</td>
                         <td><span class="badge-s @cls">@r.Status</span></td>
-                        <td class="nowrap">@r.VerificationCode</td>
+                        <td class="nowrap code">@r.VerificationCode</td>
                         <td>@r.Message</td>
                         <td class="num">@if (r.ReceiptRowId != null) { <a class="btn btn-outline-primary btn-sm" asp-action="Print" asp-route-id="@Model.Batch.PublicId" asp-route-doc="@r.Reference" target="_blank">Print</a> }</td>
                     </tr>
@@ -64,7 +64,7 @@
         {
             <div class="msg bad" role="alert">@Model.Billing.Describe(Model.BillingOptions) @Model.BillingOptions.PaymentInstructions <a href="/account">Your account</a></div>
         }
-        <section class="panel">
+        <section class="panel receipt">
             <div class="scroll"><table class="t">
                 <thead><tr><th>Your no.</th><th>Type</th><th>Customer</th><th>Rows</th><th class="num">Total</th><th>Check</th></tr></thead>
                 <tbody>
@@ -78,7 +78,7 @@
                         <td>@string.Join(", ", doc.Rows)</td>
                         <td class="num">@doc.Currency @Money(c.Total)</td>
                         <td>
-                            @if (c.AlreadySent != null) { <span class="badge-s s-Free">Sent before</span> <span class="muted">@c.AlreadySent.InvoiceNo</span> }
+                            @if (c.AlreadySent != null) { <span class="badge-s s-Free">Sent before</span> <span class="muted code">@c.AlreadySent.InvoiceNo</span> }
                             else if (c.Problems.Count == 0) { <span class="badge-s s-Active">Ready</span> @if (c.AfterInvoice != null) { <span class="muted">sent after @c.AfterInvoice</span> } }
                             else { <ul class="muted" style="margin:0;padding-left:1rem">@foreach (var p in c.Problems) { <li>@p</li> }</ul> }
                         </td>
