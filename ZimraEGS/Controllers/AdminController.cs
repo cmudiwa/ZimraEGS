@@ -17,9 +17,12 @@ namespace ZimraEGS.Controllers
         private readonly PrivacyService _privacy;
         private readonly FiscalDbContext _db;
         private readonly IConfiguration _config;
+        private readonly AutoCloseDayOptions _autoClose;
 
-        public AdminController(BillingService billing, PrivacyService privacy, FiscalDbContext db, IConfiguration config)
+        public AdminController(BillingService billing, PrivacyService privacy, FiscalDbContext db, IConfiguration config,
+            Microsoft.Extensions.Options.IOptions<AutoCloseDayOptions> autoClose)
         {
+            _autoClose = autoClose.Value;
             _billing = billing;
             _privacy = privacy;
             _db = db;
@@ -48,6 +51,14 @@ namespace ZimraEGS.Controllers
                 Devices = shown,
                 Filter = filter,
                 Message = message,
+                Server = new HomeViewModel
+                {
+                    TestDevices = devices.Count(d => d.Environment == ZimraEGS.ApiClient.Models.PlatformType.Simulation),
+                    LiveDevices = devices.Count(d => d.Environment == ZimraEGS.ApiClient.Models.PlatformType.Production),
+                    OpenFiscalDays = devices.Count(d => d.FiscalDayStatus != ZimraEGS.ApiClient.Enums.FiscalDayStatus.FiscalDayClosed),
+                    AutoCloseEnabled = _autoClose.Enabled,
+                    AutoCloseTime = _autoClose.TimeOfDay,
+                },
             });
         }
 

@@ -6,8 +6,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Fiscal Managerio</title>
-    <link rel="apple-touch-icon" sizes="60x60" href="~/images/logo.png">
-    <link rel="shortcut icon" type="image/x-icon" href="favicon.ico">
+    <link rel="apple-touch-icon" sizes="180x180" href="~/images/logo.png">
+    <link rel="icon" type="image/svg+xml" href="~/images/logo.svg">
+    <link rel="icon" type="image/x-icon" href="~/favicon.ico">
     <script src="~/js/color-modes.js"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
@@ -45,77 +46,84 @@
         </symbol>
     </svg>
 
-    <div class="dropdown position-fixed bottom-0 end-0 mb-3 me-3 bd-mode-toggle">
-
-        <button class="btn btn-bd-primary py-2 dropdown-toggle d-flex align-items-center" id="bd-theme" type="button"
-                aria-expanded="false" data-bs-toggle="dropdown" aria-label="Toggle theme (light)">
-            <svg class="bi my-1 theme-icon-active" width="1em" height="1em">
-                <use href="#sun-fill"></use>
-            </svg>
-            <span class="visually-hidden" id="bd-theme-text">Toggle theme</span>
-        </button>
-
-        <ul class="dropdown-menu dropdown-menu-end shadow" aria-labelledby="bd-theme-text">
-            <li>
-                <button type="button" class="dropdown-item d-flex align-items-center active" data-bs-theme-value="light"
-                        aria-pressed="true">
-                    <svg class="bi me-2 opacity-50" width="1em" height="1em">
-                        <use href="#sun-fill"></use>
-                    </svg>
-                    Light
-                    <svg class="bi ms-auto d-none" width="1em" height="1em">
-                        <use href="#check2"></use>
-                    </svg>
-                </button>
-            </li>
-            <li>
-                <button type="button" class="dropdown-item d-flex align-items-center" data-bs-theme-value="dark"
-                        aria-pressed="false">
-                    <svg class="bi me-2 opacity-50" width="1em" height="1em">
-                        <use href="#moon-stars-fill"></use>
-                    </svg>
-                    Dark
-                    <svg class="bi ms-auto d-none" width="1em" height="1em">
-                        <use href="#check2"></use>
-                    </svg>
-                </button>
-            </li>
-            <li>
-                <button type="button" class="dropdown-item d-flex align-items-center" data-bs-theme-value="auto"
-                        aria-pressed="false">
-                    <svg class="bi me-2 opacity-50" width="1em" height="1em">
-                        <use href="#circle-half"></use>
-                    </svg>
-                    Auto
-                    <svg class="bi ms-auto d-none" width="1em" height="1em">
-                        <use href="#check2"></use>
-                    </svg>
-                </button>
-            </li>
-        </ul>
-    </div>
-
     <header>
-        <nav class="navbar navbar-expand-lg navbar-dark brand-bar">
-            <div class="container">
-                <a class="navbar-brand" href="/">
-                    <img src="/images/logo.png" alt="Fiscal Managerio" width="40" height="40">
-                    <div class="ms-1 d-inline-block align-middle">
-                        <h5 class="mb-0">Fiscal Managerio</h5>
-                    </div>
+        @{
+            string path = Context.Request.Path.Value?.ToLowerInvariant() ?? "/";
+            bool signedIn = User.Identity?.IsAuthenticated == true;
+            bool isAdmin = User.HasClaim("zimraegs:admin", "true");
+            string Current(string prefix) => (prefix == "/" ? path == "/" : path.StartsWith(prefix)) ? "page" : "false";
+        }
+        <nav class="navbar navbar-dark brand-bar" aria-label="Main">
+            <div class="container site-bar">
+                <a class="navbar-brand site-brand" href="/">
+                    <img src="~/images/logo.svg" alt="" width="36" height="36">
+                    <span>Fiscal Managerio</span>
                 </a>
-
-                <div class="d-flex ms-auto gap-3 align-items-center">
-                    <a class="works-with d-none d-sm-inline-flex" href="https://www.manager.io" target="_blank" rel="noopener" title="Manager.io">
-                        <img src="~/images/manager-io.svg" alt="" width="28" height="28"><span>for Manager.io</span>
+                <ul class="site-nav">
+                    <li><a href="/#manager" aria-current="@Current("/")">Manager</a></li>
+                    <li><a href="/excel" aria-current="@Current("/excel")">Excel</a></li>
+                    <li><a href="/account" aria-current="@(path.StartsWith("/account") ? "page" : "false")">@(signedIn ? "Your account" : "Sign in")</a></li>
+                    @if (isAdmin) { <li><a href="/admin" aria-current="@Current("/admin")">Admin</a></li> }
+                </ul>
+                <div class="site-tools">
+                    <a class="works-with d-none d-lg-inline-flex" href="https://www.manager.io" target="_blank" rel="noopener" title="Manager.io">
+                        <img src="~/images/manager-io.svg" alt="" width="24" height="24"><span>for Manager.io</span>
                     </a>
-                    <a class="btn btn-outline-light d-flex align-items-center" href="/account">@(User.Identity?.IsAuthenticated == true ? "Your account" : "Sign in")</a>
+                <div class="dropdown bd-mode-toggle">
+
+                    <button class="btn btn-outline-light btn-theme dropdown-toggle d-flex align-items-center" id="bd-theme" type="button"
+                            aria-expanded="false" data-bs-toggle="dropdown" aria-label="Toggle theme (light)">
+                        <svg class="bi my-1 theme-icon-active" width="1em" height="1em">
+                            <use href="#sun-fill"></use>
+                        </svg>
+                        <span class="visually-hidden" id="bd-theme-text">Toggle theme</span>
+                    </button>
+
+                    <ul class="dropdown-menu dropdown-menu-end shadow" aria-labelledby="bd-theme-text">
+                        <li>
+                            <button type="button" class="dropdown-item d-flex align-items-center active" data-bs-theme-value="light"
+                                    aria-pressed="true">
+                                <svg class="bi me-2 opacity-50" width="1em" height="1em">
+                                    <use href="#sun-fill"></use>
+                                </svg>
+                                Light
+                                <svg class="bi ms-auto d-none" width="1em" height="1em">
+                                    <use href="#check2"></use>
+                                </svg>
+                            </button>
+                        </li>
+                        <li>
+                            <button type="button" class="dropdown-item d-flex align-items-center" data-bs-theme-value="dark"
+                                    aria-pressed="false">
+                                <svg class="bi me-2 opacity-50" width="1em" height="1em">
+                                    <use href="#moon-stars-fill"></use>
+                                </svg>
+                                Dark
+                                <svg class="bi ms-auto d-none" width="1em" height="1em">
+                                    <use href="#check2"></use>
+                                </svg>
+                            </button>
+                        </li>
+                        <li>
+                            <button type="button" class="dropdown-item d-flex align-items-center" data-bs-theme-value="auto"
+                                    aria-pressed="false">
+                                <svg class="bi me-2 opacity-50" width="1em" height="1em">
+                                    <use href="#circle-half"></use>
+                                </svg>
+                                Auto
+                                <svg class="bi ms-auto d-none" width="1em" height="1em">
+                                    <use href="#check2"></use>
+                                </svg>
+                            </button>
+                        </li>
+                    </ul>
+                </div>
                 </div>
             </div>
         </nav>
     </header>
 
-    <main id="maindiv" class="flex-grow-1 d-flex justify-content-center pt-4">
+    <main id="maindiv" class="flex-grow-1 d-flex justify-content-center pt-4 pb-2">
         <div class="container rounded text-center">
             @RenderBody()
         </div>

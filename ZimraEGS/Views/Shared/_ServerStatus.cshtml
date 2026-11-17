@@ -1,0 +1,46 @@
+@model HomeViewModel
+@{ int devices = Model.TestDevices + Model.LiveDevices; }
+    <section class="panel" aria-labelledby="status-title">
+        <h2 id="status-title">This server</h2>
+        <div class="status-grid">
+            <div class="stat">
+                <div class="label">Status</div>
+                <div class="value">
+                    @if (Model.DatabaseOk)
+                    {
+                        <span class="dot ok"></span><span>Running</span>
+                    }
+                    else
+                    {
+                        <span class="dot bad"></span><span>Database error</span>
+                    }
+                </div>
+            </div>
+            <div class="stat">
+                <div class="label">Connected devices</div>
+                <div class="value">
+                    @if (devices == 0)
+                    {
+                        <span>None yet</span>
+                    }
+                    else
+                    {
+                        <span>@(Model.LiveDevices > 0 ? $"{Model.LiveDevices} live" : "")@(Model.LiveDevices > 0 && Model.TestDevices > 0 ? ", " : "")@(Model.TestDevices > 0 ? $"{Model.TestDevices} test" : "")</span>
+                    }
+                </div>
+            </div>
+            <div class="stat">
+                <div class="label">Open fiscal days</div>
+                <div class="value">@Model.OpenFiscalDays</div>
+            </div>
+            <div class="stat">
+                <div class="label">Automatic day close</div>
+                <div class="value">@(Model.AutoCloseEnabled ? $"Daily at {Model.AutoCloseTime}" : "Off")</div>
+            </div>
+        </div>
+        @if (!Model.DatabaseOk)
+        {
+            <div class="notice warn">The database could not be read. Check the server's log and that the data folder is writable.</div>
+        }
+    </section>
+

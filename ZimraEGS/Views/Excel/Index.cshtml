@@ -66,16 +66,16 @@
             @if (Model.Batches.Count == 0) { <p class="muted" style="margin:0">None yet.</p> }
             else
             {
-                <div class="scroll"><table class="t">
+                <div class="scroll"><table class="t stack">
                     <thead><tr><th>File</th><th>Uploaded</th><th>Sent</th><th></th></tr></thead>
                     <tbody>
                     @foreach (var b in Model.Batches)
                     {
                         <tr>
-                            <td>@b.FileName</td>
-                            <td>@b.CreatedUtc.AddHours(2).ToString("d MMM yyyy HH:mm")</td>
-                            <td>@(b.SentUtc?.AddHours(2).ToString("d MMM yyyy HH:mm") ?? "Not yet")</td>
-                            <td class="num"><a class="btn btn-outline-primary btn-sm" asp-action="Batch" asp-route-id="@b.PublicId">Open</a></td>
+                            <td data-label="File">@b.FileName</td>
+                            <td data-label="Uploaded" class="nowrap">@b.CreatedUtc.AddHours(2).ToString("d MMM yyyy HH:mm")</td>
+                            <td data-label="Sent" class="nowrap">@(b.SentUtc?.AddHours(2).ToString("d MMM yyyy HH:mm") ?? "Not yet")</td>
+                            <td class="num act"><a class="btn btn-outline-primary btn-sm" asp-action="Batch" asp-route-id="@b.PublicId">Open</a></td>
                         </tr>
                     }
                     </tbody>

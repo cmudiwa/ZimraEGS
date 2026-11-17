@@ -7,8 +7,6 @@
             <p class="sub">@Model.Account.Email</p>
         </div>
         <div style="display:flex;gap:8px">
-            <a class="btn btn-outline-primary btn-sm" asp-controller="Excel" asp-action="Index">Invoices from Excel</a>
-            @if (Model.IsAdmin) { <a class="btn btn-outline-primary btn-sm" asp-controller="Admin" asp-action="Index">Admin</a> }
             <form asp-action="SignOutNow" method="post"><button class="btn btn-outline-secondary btn-sm" type="submit">Sign out</button></form>
         </div>
     </div>
@@ -31,26 +29,34 @@
         else
         {
             <div class="scroll">
-            <table class="t">
+            <table class="t stack">
                 <thead><tr><th>Device</th><th>Environment</th><th>Subscription</th><th class="num">Paid until</th></tr></thead>
                 <tbody>
                 @foreach (var (d, s) in Model.Devices)
                 {
                     <tr>
-                        <td><span class="code">@d.DeviceID</span><div class="muted">@d.SerialNumber</div></td>
-                        <td>@(d.Environment == ZimraEGS.ApiClient.Models.PlatformType.Production ? "Live" : "Test")</td>
-                        <td><span class="badge-s s-@s.State">@ZimraEGS.Views.Account.Status.Label(s.State)</span><div class="muted">@s.Describe(Model.Options)</div></td>
-                        <td class="num">@(d.PaidUntilUtc?.AddHours(2).ToString("d MMM yyyy") ?? "-")</td>
+                        <td data-label="Device"><span><span class="code">@d.DeviceID</span><span class="muted"> · @d.SerialNumber</span></span></td>
+                        <td data-label="Environment">@(d.Environment == ZimraEGS.ApiClient.Models.PlatformType.Production ? "Live" : "Test")</td>
+                        <td data-label="Subscription"><span><span class="badge-s s-@s.State">@ZimraEGS.Views.Account.Status.Label(s.State)</span><span class="muted d-block">@s.Describe(Model.Options)</span></span></td>
+                        <td data-label="Paid until" class="num">@(d.PaidUntilUtc?.AddHours(2).ToString("d MMM yyyy") ?? "-")</td>
                     </tr>
                 }
                 </tbody>
             </table>
             </div>
         }
-        <div class="msg warn" style="margin:14px 0 0">
-            @if (!string.IsNullOrEmpty(Model.Options.Price)) { <strong>@Model.Options.Price</strong><br /> }
-            @Model.Options.PaymentInstructions
-        </div>
+        @if (Model.Devices.Any(x => x.device.Environment == ZimraEGS.ApiClient.Models.PlatformType.Production))
+        {
+            var needsAction = Model.Devices.Any(x => x.status.State is ZimraEGS.Services.BillingState.EndingSoon or ZimraEGS.Services.BillingState.Grace or ZimraEGS.Services.BillingState.Expired or ZimraEGS.Services.BillingState.NoAccount);
+            <div class="msg @(needsAction ? "warn" : "info")" style="margin:14px 0 0">
+                @if (!string.IsNullOrEmpty(Model.Options.Price)) { <strong>@Model.Options.Price</strong><br /> }
+                @Model.Options.PaymentInstructions
+            </div>
+        }
+        else if (Model.Devices.Count > 0)
+        {
+            <p class="muted" style="margin:12px 0 0">Test devices are free. A subscription is needed only once a device goes live.</p>
+        }
     </section>
 
     <section class="panel">
@@ -59,17 +65,17 @@
         else
         {
             <div class="scroll">
-            <table class="t">
+            <table class="t stack">
                 <thead><tr><th>Recorded</th><th>Device</th><th>Period</th><th>Reference</th><th class="num">Amount</th></tr></thead>
                 <tbody>
                 @foreach (var p in Model.Payments)
                 {
                     <tr>
-                        <td>@p.RecordedUtc.AddHours(2).ToString("d MMM yyyy")</td>
-                        <td>@Model.Devices.FirstOrDefault(x => x.device.Id == p.DeviceRowId).device?.DeviceID</td>
-                        <td>@p.PeriodFromUtc.AddHours(2).ToString("d MMM yyyy") to @p.PeriodToUtc.AddHours(2).ToString("d MMM yyyy")</td>
-                        <td>@p.Reference</td>
-                        <td class="num">@(p.Amount.HasValue ? $"{p.Currency} {p.Amount:N2}" : "-")</td>
+                        <td data-label="Recorded">@p.RecordedUtc.AddHours(2).ToString("d MMM yyyy")</td>
+                        <td data-label="Device" class="code">@Model.Devices.FirstOrDefault(x => x.device.Id == p.DeviceRowId).device?.DeviceID</td>
+                        <td data-label="Period">@p.PeriodFromUtc.AddHours(2).ToString("d MMM yyyy") to @p.PeriodToUtc.AddHours(2).ToString("d MMM yyyy")</td>
+                        <td data-label="Reference">@p.Reference</td>
+                        <td data-label="Amount" class="num">@(p.Amount.HasValue ? $"{p.Currency} {p.Amount:N2}" : "-")</td>
                     </tr>
                 }
                 </tbody>

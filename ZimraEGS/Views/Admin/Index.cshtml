@@ -4,6 +4,7 @@
     <h1>Admin</h1>
     <p class="sub">Customers, devices and subscriptions. Record a payment on a device's page when you receive it. · <a asp-action="Privacy">Data protection and security log</a></p>
     @if (!string.IsNullOrEmpty(Model.Message)) { <div class="msg ok">@Model.Message</div> }
+    <partial name="_ServerStatus" model="Model.Server" />
 
     <section class="panel">
         <h2>Devices</h2>

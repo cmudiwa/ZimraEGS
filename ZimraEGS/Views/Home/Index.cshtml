@@ -1,7 +1,6 @@
 @model HomeViewModel
 @{
     ViewData["Title"] = "Fiscal Managerio";
-    int devices = Model.TestDevices + Model.LiveDevices;
 }
 
 <style>
@@ -10,12 +9,6 @@
     .home .lead-text { font-size: 1.08rem; margin: 0 0 22px; max-width: 70ch; }
     .home .panel { padding: 20px 22px; margin-bottom: 16px; }
     .home h2 { font-weight: 700; margin: 0 0 12px; }
-    .home .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); gap: 12px; }
-    .home .stat { border: 1px dashed var(--rule); border-radius: 3px; padding: 10px 12px; }
-    .home .stat .label { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-soft); }
-    .home .stat .value { font-size: 1.15rem; font-weight: 600; margin-top: 2px; }
-    .home .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; vertical-align: middle; }
-    .home .dot.ok { background: #1f9d55; } .home .dot.bad { background: #c0392b; }
     .home table.values { width: 100%; border-collapse: collapse; }
     .home table.values th, .home table.values td { padding: 9px 8px; vertical-align: middle; font-weight: normal; }
     .home table.values th { width: 28%; color: var(--ink-soft); }
@@ -25,67 +18,36 @@
     .home ol.steps { margin: 0; padding-left: 1.3rem; }
     .home ol.steps li { margin-bottom: 10px; }
     .home ol.steps li strong { font-weight: 600; }
-    .home .notice { border-radius: 3px; padding: 10px 12px; margin: 12px 0 0; font-size: .95rem; }
-    .home .notice.warn { background: var(--warn-bg); border: 1px solid var(--warn-ink); }
     .home ul.plain { margin: 0; padding-left: 1.1rem; }
     .home ul.plain li { margin-bottom: 6px; }
     .home .muted { color: var(--ink-soft); font-size: .9rem; }
 </style>
 
 <div class="home">
-    <h1>ZIMRA fiscalisation for Manager</h1>
+    <h1>Fiscalise your invoices with ZIMRA</h1>
     <p class="lead-text">
-        Fiscal Managerio sends Manager's sales invoices, credit notes and debit notes to ZIMRA's Fiscalisation Data Management
-        System (FDMS), stores the QR code and receipt numbers on each document, and prints it in ZIMRA's layout.
-        It works with <a href="https://www.manager.io" target="_blank" rel="noopener">Manager.io</a>, the desktop, server and cloud accounting software.
+        Every invoice, credit note and debit note is signed, sent to ZIMRA's Fiscalisation Data Management System (FDMS)
+        and printed in ZIMRA's layout with its verification code and QR code.
     </p>
 
-    <section class="panel receipt" aria-labelledby="status-title">
-        <h2 id="status-title">This server</h2>
-        <div class="status-grid">
-            <div class="stat">
-                <div class="label">Status</div>
-                <div class="value">
-                    @if (Model.DatabaseOk)
-                    {
-                        <span class="dot ok"></span><span>Running</span>
-                    }
-                    else
-                    {
-                        <span class="dot bad"></span><span>Database error</span>
-                    }
-                </div>
-            </div>
-            <div class="stat">
-                <div class="label">Connected devices</div>
-                <div class="value">
-                    @if (devices == 0)
-                    {
-                        <span>None yet</span>
-                    }
-                    else
-                    {
-                        <span>@(Model.LiveDevices > 0 ? $"{Model.LiveDevices} live" : "")@(Model.LiveDevices > 0 && Model.TestDevices > 0 ? ", " : "")@(Model.TestDevices > 0 ? $"{Model.TestDevices} test" : "")</span>
-                    }
-                </div>
-            </div>
-            <div class="stat">
-                <div class="label">Open fiscal days</div>
-                <div class="value">@Model.OpenFiscalDays</div>
-            </div>
-            <div class="stat">
-                <div class="label">Automatic day close</div>
-                <div class="value">@(Model.AutoCloseEnabled ? $"Daily at {Model.AutoCloseTime}" : "Off")</div>
-            </div>
-        </div>
-        @if (!Model.DatabaseOk)
-        {
-            <div class="notice warn">The database could not be read. Check the server's log and that the data folder is writable.</div>
-        }
-    </section>
+    <h2 class="choose-title">Where do you keep your invoices?</h2>
+    <div class="choose">
+        <a class="panel receipt choice" href="#manager">
+            <span class="choice-kicker">In Manager.io</span>
+            <strong>Send from the invoice screen</strong>
+            <span>Add the ZIMRA button to Manager once. Then open an invoice and click it.</span>
+            <span class="choice-go">Set up Manager &darr;</span>
+        </a>
+        <a class="panel receipt choice" href="/excel">
+            <span class="choice-kicker">In Excel</span>
+            <strong>Upload a workbook</strong>
+            <span>Fill in our template, upload it, check and send. You get it back with the fiscal numbers.</span>
+            <span class="choice-go">Go to Excel &rarr;</span>
+        </a>
+    </div>
 
-    <section class="panel" aria-labelledby="extension-title">
-        <h2 id="extension-title">1. Add the extension to Manager</h2>
+    <section class="panel" id="manager" aria-labelledby="extension-title">
+        <h2 id="extension-title">Manager · 1. Add the ZIMRA button</h2>
         <p class="muted" style="margin-top:-4px">
             In your business in Manager, add an extension. Depending on the version it is under Settings, as
             <em>Extensions</em> or <em>Custom Buttons</em>. Enter these values:
@@ -112,18 +74,12 @@
     </section>
 
     <section class="panel" aria-labelledby="steps-title">
-        <h2 id="steps-title">2. Connect and fiscalise</h2>
+        <h2 id="steps-title">Manager · 2. Connect and fiscalise</h2>
         <ol class="steps">
             <li><strong>Open any sales invoice and click ZIMRA.</strong> The first time, the panel asks for the Device ID, Serial Number and Activation Key that ZIMRA gave you, then sets up the custom fields, tax codes and invoice theme in Manager.</li>
             <li><strong>Set the HS codes of your items.</strong> In the panel, open <em>HS codes for items</em>: it suggests codes from ZIMRA's tariff (@Model.HsCodeCount.ToString("N0") codes) and checks them.</li>
             <li><strong>Send documents.</strong> Open an invoice, credit note or debit note, click ZIMRA and then <em>Send to ZIMRA</em>. The fiscal day opens by itself and is closed every night.</li>
         </ol>
-    </section>
-
-    <section class="panel" aria-labelledby="excel-title">
-        <h2 id="excel-title">Not using Manager? Fiscalise from Excel</h2>
-        <p class="muted" style="margin:0 0 10px">Keep your invoices in an Excel workbook: download the template, fill it in and upload it. Every document is checked, sent to ZIMRA and printed in ZIMRA's layout, and you get the workbook back with the fiscal numbers and QR links.</p>
-        <a class="btn btn-primary" href="/excel">Invoices from Excel</a>
     </section>
 
     <section class="panel" aria-labelledby="notes-title">

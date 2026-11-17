@@ -27,18 +27,18 @@
                     <form asp-action="Again" asp-route-id="@Model.Batch.PublicId" method="post"><button class="btn btn-outline-secondary" type="submit">Check again and send the rest</button></form>
                 }
             </div>
-            <div class="scroll"><table class="t">
-                <thead><tr><th>Your no.</th><th>Type</th><th>Fiscal no.</th><th>Status</th><th>Verification code</th><th>Message</th><th></th></tr></thead>
+            <div class="scroll"><table class="t stack">
+                <thead><tr><th>Invoice no.</th><th>Type</th><th>Fiscal no.</th><th>Status</th><th>Verification code</th><th>Message</th><th></th></tr></thead>
                 <tbody>
                 @foreach (var r in Model.Results)
                 {
                     var cls = r.Status == "APPROVED" ? "s-Active" : r.Status == "NOT SENT" ? "s-Expired" : "s-Grace";
                     <tr>
-                        <td>@r.Reference</td><td>@r.Type</td><td class="nowrap code">@r.FiscalNumber</td>
-                        <td><span class="badge-s @cls">@r.Status</span></td>
-                        <td class="nowrap code">@r.VerificationCode</td>
-                        <td>@r.Message</td>
-                        <td class="num">@if (r.ReceiptRowId != null) { <a class="btn btn-outline-primary btn-sm" asp-action="Print" asp-route-id="@Model.Batch.PublicId" asp-route-doc="@r.Reference" target="_blank">Print</a> }</td>
+                        <td data-label="Invoice no." class="nowrap">@r.Reference</td><td data-label="Type">@r.Type</td><td data-label="Fiscal no." class="nowrap code">@r.FiscalNumber</td>
+                        <td data-label="Status"><span class="badge-s @cls">@r.Status</span></td>
+                        <td data-label="Verification code" class="nowrap code">@r.VerificationCode</td>
+                        <td data-label="Message">@r.Message</td>
+                        <td class="num act">@if (r.ReceiptRowId != null) { <a class="btn btn-outline-primary btn-sm" asp-action="Print" asp-route-id="@Model.Batch.PublicId" asp-route-doc="@r.Reference" target="_blank">Print</a> }</td>
                     </tr>
                 }
                 </tbody>
@@ -65,19 +65,19 @@
             <div class="msg bad" role="alert">@Model.Billing.Describe(Model.BillingOptions) @Model.BillingOptions.PaymentInstructions <a href="/account">Your account</a></div>
         }
         <section class="panel receipt">
-            <div class="scroll"><table class="t">
-                <thead><tr><th>Your no.</th><th>Type</th><th>Customer</th><th>Rows</th><th class="num">Total</th><th>Check</th></tr></thead>
+            <div class="scroll"><table class="t stack">
+                <thead><tr><th>Invoice no.</th><th>Type</th><th>Customer</th><th>Rows</th><th class="num">Total</th><th>Check</th></tr></thead>
                 <tbody>
                 @foreach (var c in Model.Checks)
                 {
                     var doc = c.Document;
                     <tr>
-                        <td>@doc.Reference</td>
-                        <td>@doc.TypeName</td>
-                        <td>@(string.IsNullOrEmpty(doc.BuyerName) ? "-" : doc.BuyerName)</td>
-                        <td>@string.Join(", ", doc.Rows)</td>
-                        <td class="num">@doc.Currency @Money(c.Total)</td>
-                        <td>
+                        <td data-label="Invoice no." class="nowrap">@doc.Reference</td>
+                        <td data-label="Type">@doc.TypeName</td>
+                        <td data-label="Customer">@(string.IsNullOrEmpty(doc.BuyerName) ? "-" : doc.BuyerName)</td>
+                        <td data-label="Rows">@string.Join(", ", doc.Rows)</td>
+                        <td data-label="Total" class="num">@doc.Currency @Money(c.Total)</td>
+                        <td data-label="Check">
                             @if (c.AlreadySent != null) { <span class="badge-s s-Free">Sent before</span> <span class="muted code">@c.AlreadySent.InvoiceNo</span> }
                             else if (c.Problems.Count == 0) { <span class="badge-s s-Active">Ready</span> @if (c.AfterInvoice != null) { <span class="muted">sent after @c.AfterInvoice</span> } }
                             else { <ul class="muted" style="margin:0;padding-left:1rem">@foreach (var p in c.Problems) { <li>@p</li> }</ul> }

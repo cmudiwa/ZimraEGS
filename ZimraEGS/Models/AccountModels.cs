@@ -51,6 +51,7 @@ namespace ZimraEGS.Models
         public List<(Device device, BillingStatus status)> Devices { get; set; } = [];
         public string Filter { get; set; } = "attention";
         public string? Message { get; set; }
+        public HomeViewModel Server { get; set; } = new();
     }
 
     public class AdminDeviceModel
