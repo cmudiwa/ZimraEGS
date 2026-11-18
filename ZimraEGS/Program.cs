@@ -20,6 +20,22 @@ namespace ZimraEGS
             // "reset-password you@example.com": sets a new password for an account and prints it, then exits.
             // Only someone who can run commands on this server can use it, so it also works for the administrator.
             string? resetEmail = null;
+            // "backup [folder] [--keep N]": writes a consistent copy of the database and the key ring to a
+            // .tar.gz (default folder: <data>/backups, keeping the newest 14), then exits. Safe while the app runs.
+            string? backupFolder = null;
+            int backupKeep = 14;
+            if (args.Length > 0 && string.Equals(args[0], "backup", StringComparison.OrdinalIgnoreCase))
+            {
+                var rest = args.Skip(1).ToList();
+                int keepAt = rest.FindIndex(a => a == "--keep");
+                if (keepAt >= 0 && keepAt + 1 < rest.Count && int.TryParse(rest[keepAt + 1], out int keep) && keep > 0)
+                {
+                    backupKeep = keep;
+                    rest.RemoveRange(keepAt, 2);
+                }
+                backupFolder = rest.FirstOrDefault(a => !a.StartsWith("--")) ?? string.Empty;
+                args = rest.Where(a => a.StartsWith("--")).ToArray();
+            }
             if (args.Length > 0 && string.Equals(args[0], "reset-password", StringComparison.OrdinalIgnoreCase))
             {
                 if (args.Length < 2)
@@ -141,6 +157,14 @@ namespace ZimraEGS
             using (var scope = app.Services.CreateScope())
             {
                 scope.ServiceProvider.GetRequiredService<FiscalDbContext>().Database.Migrate();
+            }
+
+            if (backupFolder != null)
+            {
+                string folder = string.IsNullOrWhiteSpace(backupFolder) ? Path.Combine(dataDirectory, "backups") : Path.GetFullPath(backupFolder);
+                string written = Backup.Write(connectionString, Path.Combine(dataDirectory, "keys"), folder, backupKeep);
+                Console.WriteLine(written);
+                return;
             }
 
             if (resetEmail != null)

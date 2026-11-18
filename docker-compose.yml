@@ -1,0 +1,48 @@
+# Fiscal Managerio with Caddy in front for https.
+#   1. cp .env.example .env                                  and set DOMAIN
+#   2. cp appsettings.Local.example.json appsettings.Local.json   and fill in your settings
+#   3. docker compose up -d --build
+# Run ONE copy only: the app numbers receipts and closes fiscal days itself.
+
+services:
+  app:
+    build: .
+    image: fiscal-managerio:latest
+    restart: unless-stopped
+    environment:
+      DataDirectory: /data
+      # Caddy, in its own container, passes on that visitors used https. The app port is not published,
+      # so only Caddy can reach it.
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+    volumes:
+      # Database, encryption keys, logs and backups. Never remove this volume: it holds the devices' keys.
+      - zimraegs-data:/data
+      - type: bind
+        source: ./appsettings.Local.json
+        target: /app/appsettings.Local.json
+        read_only: true
+        bind:
+          create_host_path: false
+    expose:
+      - "8080"
+
+  caddy:
+    image: caddy:2.8
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in .env, for example fiscal.example.com}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  zimraegs-data:
+  caddy-data:
+  caddy-config:

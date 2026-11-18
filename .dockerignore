@@ -1,0 +1,10 @@
+.git
+.github
+**/bin
+**/obj
+**/appsettings.Local.json
+ZimraEGS.Tests
+tools
+backups
+deploy
+*.md

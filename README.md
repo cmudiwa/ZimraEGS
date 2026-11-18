@@ -116,6 +116,32 @@ Create a credit note that refers to the fiscalised invoice, enter the reason in 
 
 ---
 
+## Run with Docker
+
+Two containers: the app, and Caddy in front of it for https (it gets and renews the certificate itself). The database, encryption keys, logs and backups live in the `zimraegs-data` volume. Run **one** copy only.
+
+1. On a server with Docker, open ports 80 and 443 and point your domain at it. Then:
+   ```bash
+   git clone -b claude/peaceful-bell-yss965 https://github.com/cmudiwa/ZimraEGS.git /opt/fiscal && cd /opt/fiscal
+   cp .env.example .env                                     # set DOMAIN=fiscal.yourdomain.co.zw
+   cp appsettings.Local.example.json appsettings.Local.json # your admin e-mail and privacy details
+   docker compose up -d --build
+   ```
+2. Open `https://<your domain>`, create your account with the admin e-mail, and in Manager set the extension's Endpoint to `https://<your domain>/extension`.
+
+| Task | Command |
+| --- | --- |
+| Logs | `docker compose logs -f app` |
+| Update | `git pull && docker compose up -d --build` |
+| Back up now | `./deploy/backup.sh` (database + keys, safe while running; saved in `./backups`, newest 30 kept) |
+| Back up daily | `crontab -e`, then `15 2 * * * /opt/fiscal/deploy/backup.sh >> /opt/fiscal/backups/backup.log 2>&1` |
+| Restore | `./deploy/restore.sh backups/zimraegs-backup-<date>.tar.gz` (asks you to type RESTORE) |
+| Reset a password | `docker compose exec app dotnet ZimraEGS.dll reset-password you@example.com` |
+
+Backups hold the keys that decrypt your devices' private keys: copy `./backups` off the server (another machine or encrypted storage) and keep it private. **Never** run `docker compose down -v`: `-v` deletes the data volume, and with it every device's registration.
+
+Moving from your PC: stop the app on the PC, run `dotnet run --project ZimraEGS -- backup` there (it prints where the backup file went), copy that file to the server's `backups` folder, and run `./deploy/restore.sh` with it. Without Docker, `dotnet ZimraEGS.dll backup` works the same and writes to `<data folder>/backups`.
+
 ## Self-hosting on a Linux server (for example Hetzner)
 
 The app is one ASP.NET Core 8 program with its own SQLite database: no separate database server is needed. Run **one** copy; it closes fiscal days on a timer.

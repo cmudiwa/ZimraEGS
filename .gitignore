@@ -371,3 +371,7 @@ ZimraEGS/Data/keys/
 
 # Local settings of each installation (admin e-mail, business details)
 appsettings.Local.json
+
+# Docker: your domain and backups copied out of the container
+.env
+backups/
